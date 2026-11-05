@@ -110,6 +110,28 @@ class Crustdata:
         matches = _flatten_identify(data)
         return (matches[0] if matches else None), meta
 
+    def people_in_roles(self, company_id: int, title_words, limit=6):
+        """People whose current role at the company has any of these words in the title."""
+        body = {
+            "filters": {"op": "and", "conditions": [
+                {"field": "experience.employment_details.current.company_id", "type": "=", "value": company_id},
+                {"op": "or", "conditions": [
+                    {"field": "experience.employment_details.current.title", "type": "(.)", "value": w}
+                    for w in title_words]},
+            ]},
+            "limit": limit,
+            "fields": ["basic_profile.name", "basic_profile.current_title"],
+        }
+        data, meta = self.post("/person/search", body)
+        return data.get("profiles") or [], meta
+
+    def news(self, query: str, location="IN"):
+        """Live news search. 1 credit per query."""
+        data, meta = self.post("/web/search/live", {"query": query, "sources": ["news"], "location": location})
+        if not isinstance(data, dict) or data.get("success") is False:
+            raise CrustdataError(f"news search failed: {str(data)[:160]}")
+        return data.get("results") or [], meta
+
     def find_person_at_company(self, name: str, company_id: int):
         """People with this name who work or worked at the company."""
         body = {

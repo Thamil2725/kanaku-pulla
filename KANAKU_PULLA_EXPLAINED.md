@@ -6,7 +6,7 @@
 Labels: `OPEN` = known problem, not fixed. `IN PROGRESS` = being fixed now. `FIXED - NOT VERIFIED` = a change
 exists but its check hasn't passed yet. `VERIFIED` = fixed and its automated test passed.*
 
-**How this was checked:** 42 automated tests (`python -m pytest tests`), run offline against temporary databases
+**How this was checked:** 43 automated tests (`python -m pytest tests`), run offline against temporary databases
 with six recorded Crustdata answers, the backup text reader and rule-written explanations, plus a real
 "kill the program" crash test in a separate process. Separately, one **live** run of all five demo emails against
 Crustdata (6 calls, 0.46 credits, retrieved 2026-11-05 20:24 UTC) gave the same results. Claude was **not** used in
@@ -57,7 +57,7 @@ either: no API key is set, so the Claude reading and summary paths are still unt
 | If delivery was confirmed as one ₹1,00,000 receipt, two ₹50,000 bills can't share it: each is held until the team confirms delivery for it. Safe, but extra clicks | `OPEN` (planned: let a receipt be partly used) |
 | Someone edits our ledger by hand (a paid ₹50,000 changed to ₹0): the order then looked half used and a third bill was paid. The bank paid ₹1,50,000 against a ₹1,00,000 order | `VERIFIED` fixed: an order's spending now counts what the bank actually paid, so the third bill is held ("₹0 left"); and while our books and the bank disagree, every new payment is paused and held until they are reconciled |
 | A held bill is only re-checked when someone records a receipt in the app, so correcting a record elsewhere leaves it on hold | `VERIFIED` fixed: a "Re-check now" button (and `recheck` command) runs every rule again; nothing is waived |
-| The reading and summary model | `FIXED - NOT VERIFIED`: now Google Gemini first (free key from Google AI Studio), then OpenRouter (NVIDIA Nemotron 3 Ultra, free), then Claude, whichever keys are set. A failing key falls through to the next; if all fail, the rule-based reader is used. Tested with stubbed replies only; no live key yet |
+| The reading and summary model | `FIXED - NOT VERIFIED`: now Google Gemini first (free key from Google AI Studio), then OpenRouter (NVIDIA Nemotron 3 Ultra, free), then Claude, whichever keys are set. A failing key falls through to the next; if all fail, the rule-based reader is used. OpenRouter (Nemotron 3 Ultra) checked live on two samples: fields read correctly, amounts agreed, the hidden instruction was spotted; about 25–45 seconds per bill on the free tier. Gemini not yet run with a live key |
 
 **Also done since the review:** renamed to Kanaku Pulla; a new web app with one page per job and a live progress view
 for every bill; architecture diagrams in `docs/ARCHITECTURE.md` (the link for the submission form).
@@ -225,6 +225,7 @@ changes by phone, and onboarding new suppliers automatically.
   theme; keyboard use works, including a skip link; nothing scrolls sideways on a phone-width screen.
 - **2026-11-06, renamed to Kanaku Pulla, new web app:** separate pages for each job (overview, new invoice, exceptions, all cases, ledger, payment rules, demo tools) and four tabs per bill. Submitting a bill now shows live progress: each step ticks off as it runs, what was found fills in, and the result appears at the end. Checked in a browser with live Crustdata calls; the accessibility audit found no problems on any page in either theme. 34 tests pass.
 - **2026-11-06, books and model:** payments pause while our ledger and the bank disagree; order spending counts what the bank paid; a Re-check button for held bills; the model is now Gemini, then OpenRouter, then Claude, whichever keys are set. 42 tests pass.
+- **2026-11-06, more Crustdata:** every bill now gets vendor context from Crustdata on a new Vendor tab: company profile (founded, employees, funding), people in finance roles, and a news check for fraud, breach or insolvency stories. It is context only and never decides. Checked live: about 4 credits for a new vendor, free when cached. Also: 15 manual test emails in `manual_tests/`, and the OpenRouter key is read from a git-ignored file. 43 tests pass.
 
 ## Verification summary (2026-11-06)
 

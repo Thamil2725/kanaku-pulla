@@ -67,7 +67,7 @@ SEVERITY = {"block": ("Blocks payment", "bad", "✕"), "duplicate": ("Already in
             "hold": ("Needs evidence", "hold", "!"), "warn": ("Note", "note", "i")}
 STEP_LABELS = {
     "extract": "Read the email", "resolve": "Identify the vendor", "verify_sender": "Check the named sender",
-    "profile": "Profile a new vendor", "decide": "Apply the payment rules", "explain": "Write the explanation",
+    "profile": "Profile the vendor", "decide": "Apply the payment rules", "explain": "Write the explanation",
     "act": "Reserve and pay", "notify": "Tell the team",
 }
 KIND = {"fact": ("Source", "ok"), "claim": ("Email claim", "hold"), "inference": ("Reasoning", "na"),
@@ -817,7 +817,9 @@ def run_view(conn, case_id, intro=False):
         fact("Sender", SENDER_WORDS.get(sender.get("status"), sender.get("status") or ""), "sender" in s),
         fact("Purchase order", match.get("po_number") or "none matched", "findings" in s),
         fact("Receipt", match.get("receipt_id") or "none available", "findings" in s),
+        fact("Vendor profile", _intel_line(s.get("intel") or {}), "intel" in s),
         fact("Decision", (s.get("decision") or "").title(), "decision" in s),
+        fact("Crustdata credits", f"{s.get('crustdata_credits', 0):g} (cached answers are free)", "intel" in s),
     ))
 
     outcome, announce = "", ""
@@ -904,8 +906,9 @@ def case_frame(conn, case_id, tab, inner, note="", error=""):
     tabs = "".join(
         f'<a href="/cases/{case_id}{suffix}"{" aria-current=\"page\"" if key == tab else ""}>{name}'
         + (f' <span class="mono small muted">{n_ev}</span>' if key == "evidence" else "") + "</a>"
-        for key, suffix, name in (("decision", "", "Decision"), ("evidence", "/evidence", "Evidence"),
-                                  ("activity", "/activity", "Activity"), ("email", "/email", "Email")))
+        for key, suffix, name in (("decision", "", "Decision"), ("vendor", "/vendor", "Vendor"),
+                                  ("evidence", "/evidence", "Evidence"), ("activity", "/activity", "Activity"),
+                                  ("email", "/email", "Email")))
     meta = (f'<p class="meta-line"><span>Invoice {escape(f.get("invoice_number") or "unclear")}</span>'
             f'<span>{claimed_amount(f)} {escape(f.get("currency") or "")} as claimed</span>'
             f'<span>From {escape(f.get("sender_email") or "unknown")}</span></p>')
@@ -1012,6 +1015,75 @@ def case_decision(case_id: str, note: str = "", error: str = ""):
 </div>"""
     with closing(db.connect()) as conn:
         return case_frame(conn, case_id, "decision", inner, note=note, error=error)
+
+
+def _intel_line(i):
+    c = i.get("company") or {}
+    bits = []
+    if c.get("employees") is not None:
+        bits.append(f"{c['employees']:,} employees")
+    if c.get("year_founded"):
+        bits.append(f"founded {c['year_founded']}")
+    if "people" in i:
+        bits.append(f"{len(i['people'])} finance profile(s)")
+    if "news" in i:
+        bits.append(f"{len(i['news'])} news hit(s)")
+    return " · ".join(bits) or "not available"
+
+
+@app.get("/cases/{case_id}/vendor", response_class=HTMLResponse)
+def case_vendor(case_id: str):
+    conn, row = _load_case(case_id)
+    with closing(conn):
+        if not row:
+            return _missing(case_id)
+        s = json.loads(row["state"])
+        i, c = s.get("intel") or {}, (s.get("intel") or {}).get("company") or {}
+
+        def row_(label, value):
+            return f"<dt>{label}</dt><dd>{value}</dd>" if value not in (None, "") else ""
+
+        growth = " · ".join(f"{v:+.0f}% in {k}" for k, v in (("6 months", c.get("growth_6m")),
+                                                             ("12 months", c.get("growth_12m")))
+                            if isinstance(v, (int, float)))
+        funding = (f"${c['funding_usd'] / 1e6:,.0f}M" + (f" · last round {escape(str(c['last_round']))}"
+                   + (f", {escape(str(c['last_round_date'])[:7])}" if c.get("last_round_date") else "")
+                   if c.get("last_round") else "")) if c.get("funding_usd") else ""
+        profile = "".join((
+            row_("Name", escape(c.get("name") or "")),
+            row_("Founded", escape(str(c.get("year_founded") or ""))),
+            row_("Employees", (f"{c['employees']:,}" + (f" ({growth})" if growth else "")) if c.get("employees") is not None else ""),
+            row_("Funding", funding),
+            row_("Type", escape(c.get("company_type") or "")),
+            row_("Domain", escape(c.get("domain") or "")),
+            row_("Profile", f'<a href="{escape(c["profile_url"])}" target="_blank" rel="noopener">company page'
+                            f'<span class="sr-only"> (opens in a new tab)</span></a>' if c.get("profile_url") else ""),
+        )) if c else ""
+        people = "".join(f"<li><b>{escape(p['name'])}</b> <span class='muted'>· {escape(p['title'])}</span></li>"
+                         for p in i.get("people") or [])
+        news = "".join(
+            f"<li><a href='{escape(n.get('url') or '#')}' target='_blank' rel='noopener'>{escape(n.get('title') or 'untitled')}"
+            f"<span class='sr-only'> (opens in a new tab)</span></a>"
+            + (f"<div class='small muted'>{escape((n.get('snippet') or '')[:200])}</div>" if n.get("snippet") else "")
+            + "</li>" for n in i.get("news") or [])
+        missing = "".join(f"<li>{escape(u)}</li>" for u in i.get("unavailable") or [])
+        empty = '<p class="empty">Not looked up: no company was found for this invoice.</p>'
+        inner = f"""
+<p class="hint">From Crustdata, for context. None of this can approve or block a payment.
+Credits used on this case: <span class="mono">{s.get('crustdata_credits', 0):g}</span> (cached answers are free).</p>
+<div class="cols even">
+  <section class="panel" aria-labelledby="h-co"><div class="panel-head"><h2 id="h-co">Company profile</h2></div>
+    <div class="panel-body">{f'<dl class="facts">{profile}</dl>' if profile else (empty if not i else '<p class="muted">Not available.</p>')}</div></section>
+  <section class="panel" aria-labelledby="h-fin"><div class="panel-head"><h2 id="h-fin">Finance people</h2>
+    <span class="hint">public profiles, not proof of authority</span></div>
+    <div class="panel-body">{f'<ul style="margin:0;padding-left:20px">{people}</ul>' if people else '<p class="muted">None found.</p>'}
+    <p class="hint">For a call-back, use the contact in our vendor register first.</p></div></section>
+</div>
+<section class="panel" aria-labelledby="h-news"><div class="panel-head"><h2 id="h-news">News check</h2>
+  <span class="hint">fraud, breach, insolvency terms · search hits, not findings</span></div>
+  <div class="panel-body">{f'<ul class="stack" style="margin:0;padding-left:20px">{news}</ul>' if news else '<p class="muted">No results.</p>'}</div></section>
+{f'<section class="panel" aria-labelledby="h-na"><div class="panel-head"><h2 id="h-na">Not available</h2></div><div class="panel-body"><ul style="margin:0;padding-left:20px">{missing}</ul></div></section>' if missing else ''}"""
+        return case_frame(conn, case_id, "vendor", inner)
 
 
 @app.get("/cases/{case_id}/evidence", response_class=HTMLResponse)

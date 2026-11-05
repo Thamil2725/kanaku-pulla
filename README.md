@@ -93,9 +93,11 @@ python -m kanaku_pulla ledger
 
 uvicorn kanaku_pulla.web:app --reload    # http://127.0.0.1:8000
 
-python -m pytest tests                   # 42 offline tests: temp databases, recorded Crustdata answers, real crash test
+python -m pytest tests                   # 43 offline tests: temp databases, recorded Crustdata answers, real crash test
 python -m kanaku_pulla issues            # anything found while upgrading an older database
 ```
+
+**Manual tests:** `manual_tests/` has 15 emails to paste by hand, with expected results in its README.
 
 **The web app** has one page per job: Overview, New invoice, Exceptions (held invoices and the one thing each needs), All cases, Ledger (our books beside the bank's), Payment rules and Demo tools (resume, crash demo, fresh start). Submitting an invoice opens a live progress page: each step ticks off as it runs, the findings fill in, and the result appears at the end. Each case has four tabs: Decision (the payment-rule checklist), Evidence, Activity and Email (every field read, and whether it was found in the text).
 
@@ -112,8 +114,11 @@ fields Kanaku Pulla uses.
   set are tried in order: Google Gemini (`gemini-3.5-flash-lite`, free key from AI Studio), OpenRouter (NVIDIA
   Nemotron 3 Ultra, free), then Claude. A failing key falls through to the next; if all fail, the regex reader is used.
   The amount is always read a second time by the regex reader, and a disagreement holds the invoice.
-- **Crustdata:** `/company/identify` (domain and name), `/person/search` (name + company id, current and past roles),
-  `/company/enrich` for vendors not in the register. Responses are cached with their retrieval time and refetched
+- **Crustdata:** `/company/identify` (domain and name) and `/person/search` (the named sender's roles) feed the
+  checks. For context on every vendor (shown on the case's Vendor tab, never used to decide): `/company/enrich`
+  (founded, headcount and growth, funding), `/person/search` for people in finance roles, and `/web/search/live`
+  (news, India) for fraud, breach or insolvency stories. Each case shows the credits it used (about 4 for a new
+  vendor; cached answers are free). Responses are cached with their retrieval time and refetched
   after 24 hours; failures are retried with backoff and, if they persist, recorded as "could not verify".
 - **Exactly once:** the payment key is vendor + normalized invoice number (not amount), reserved in the ledger before
   the bank call. The bank refuses a reused key if account, IFSC, amount or currency differ.

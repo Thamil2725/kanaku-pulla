@@ -98,7 +98,8 @@ def test_web_pages_render(env):
     client = TestClient(app)
     paths = ["/", "/new", "/exceptions", "/cases", "/cases?status=HOLD", "/ledger", "/rules", "/policy", "/demo"]
     for cid in (case_id, held, odd):
-        paths += [f"/cases/{cid}", f"/cases/{cid}/evidence", f"/cases/{cid}/activity", f"/cases/{cid}/email"]
+        paths += [f"/cases/{cid}", f"/cases/{cid}/vendor", f"/cases/{cid}/evidence", f"/cases/{cid}/activity",
+                  f"/cases/{cid}/email"]
     for path in paths:
         assert client.get(path).status_code == 200, path
     assert client.get("/cases/C-NOPE").status_code == 200  # friendly "no such case" page
@@ -569,3 +570,33 @@ def test_openrouter_reply_is_cleaned_and_repaired(monkeypatch):
     assert parsed.points[0].text == "Paid."
     assert len(sent) == 2 and "did not match the schema" in sent[1]["messages"][-1]["content"]
     assert sent[0]["model"] == config.OPENROUTER_MODEL
+
+
+def test_vendor_context_from_crustdata_is_shown_but_never_decides(env, monkeypatch):
+    from kanaku_pulla.crustdata import Crustdata as CD
+
+    def fake_enrich(self, company_id, fields=("basic_info",)):
+        return ({"crustdata_company_id": company_id,
+                 "basic_info": {"name": "Razorpay", "year_founded": 2014, "company_type": "Privately Held",
+                                "primary_domain": "razorpay.com", "professional_network_url": "https://example.org/rzp"},
+                 "headcount": {"total": 4038, "growth_percent": {"6m": 3.2}},
+                 "funding": {"total_investment_usd": 817000000, "last_round_type": "series_f"}},
+                {"retrieved_at": "2026-11-06T00:00:00+00:00", "cached": False, "credits": 2})
+
+    monkeypatch.setattr(CD, "enrich_company", fake_enrich)
+    monkeypatch.setattr(CD, "people_in_roles", lambda self, cid, words, limit=6: (
+        [{"basic_profile": {"name": "A. Person", "current_title": "Finance Controller"}}],
+        {"retrieved_at": "2026-11-06T00:00:00+00:00", "cached": False, "credits": 0.03}))
+    monkeypatch.setattr(CD, "news", lambda self, q, location="IN": (
+        [{"title": "Payments firm hit by fraud", "url": "https://news.example/1", "snippet": "..."}],
+        {"retrieved_at": "2026-11-06T00:00:00+00:00", "cached": False, "credits": 1}))
+    case_id, st = process(env.conn, load("01_razorpay_invoice.txt"))
+    s = state_of(env.conn, case_id)
+    assert st == "PAID"  # a scary news hit is context, not a reason to hold
+    assert s["intel"]["company"]["employees"] == 4038 and s["intel"]["people"] and s["intel"]["news"]
+    sources = {e["source"] for e in db.get_evidence(env.conn, case_id)}
+    assert {"crustdata:/company/enrich", "crustdata:/web/search/live"} <= sources
+    from fastapi.testclient import TestClient
+    from kanaku_pulla.web import app
+    page = TestClient(app).get(f"/cases/{case_id}/vendor").text
+    assert "4,038" in page and "Finance Controller" in page and "Payments firm hit by fraud" in page

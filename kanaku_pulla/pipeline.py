@@ -18,7 +18,7 @@ import os
 import sys
 import uuid
 
-from . import bank, books, checks, config, db, llm, memo, policy
+from . import bank, books, checks, config, db, intel, llm, memo, policy
 from .crustdata import Crustdata
 from .extract import best_amount, currency_reading, extract, quote_is_grounded
 from .money import fmt, rupees_to_paise, to_paise
@@ -78,6 +78,9 @@ def run(conn, case_id):
             with conn:
                 conn.execute("UPDATE cases SET status = 'ERROR', updated_at = ? WHERE id = ?", (db.now(), case_id))
             return "ERROR"
+        if cd.credits_used:  # Crustdata credits spent on this case (cached answers cost nothing)
+            state["crustdata_credits"] = round(state.get("crustdata_credits", 0) + cd.credits_used, 2)
+            cd.credits_used = 0
         _advance(conn, case_id, state, next_step, status)
         maybe_crash(f"after_{step}")
 
@@ -156,17 +159,22 @@ def step_profile(conn, cd, case_id, row, state):
     res = state["resolution"]
     company_id = ((res.get("vendor") or {}).get("crustdata_company_id")
                   or (res.get("company") or {}).get("crustdata_company_id"))
-    # Only new vendors need a full profile; known vendors were checked at onboarding.
-    if company_id and not res.get("vendor"):
-        state["profile"] = checks.company_profile(conn, case_id, cd, company_id)
-        p = state["profile"]
-        db.log_event(conn, case_id, "profile",
-                     f"Founded {p.get('year_founded') or 'unknown'} · {p.get('headcount') or 'unknown'} employees",
-                     evidence=p["evidence"])
+    # Context for the person reading the case: profile, finance people, news. Never used by the policy.
+    if company_id:
+        name = ((res.get("vendor") or {}).get("legal_name") or (res.get("company") or {}).get("name")
+                or state["fields"].get("vendor_name") or "the vendor")
+        intel_data = intel.gather(conn, case_id, cd, company_id, name)
+        state["intel"] = {k: v for k, v in intel_data.items() if k != "evidence"}
+        c = intel_data["company"] or {}
+        bits = [f"{c['employees']:,} employees" if c.get("employees") is not None else None,
+                f"{len(intel_data['people'])} finance profile(s)" if not any(u.startswith("Finance") for u in intel_data["unavailable"]) else None,
+                f"{len(intel_data['news'])} news hit(s)" if not any(u.startswith("News") for u in intel_data["unavailable"]) else None]
+        said = " · ".join(b for b in bits if b) or "Vendor context unavailable"
+        db.log_event(conn, case_id, "profile", said, evidence=intel_data["evidence"])
     else:
-        state["profile"] = {}
-        db.log_event(conn, case_id, "profile", "Skipped: vendor already onboarded" if res.get("vendor")
-                     else "Skipped: no company found to profile")
+        state["intel"] = {}
+        db.log_event(conn, case_id, "profile", "Skipped: no company found to profile")
+    state["profile"] = {}
     return "decide", None
 
 
