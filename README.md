@@ -1,4 +1,4 @@
-# Kanaku Pulla (கணக்குப்பிள்ளை)
+# Kanaku Pulla
 
 **An accounts-payable agent that pays real vendor invoices exactly once and stops the fake ones.**
 Built overnight at ContextCon 04, IIT Kanpur. Theme: *Buying and paying*, with *Trust and compliance*.

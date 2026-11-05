@@ -425,7 +425,7 @@ def shell(title, body, active="", note="", error=""):
 <body><a class="skip" href="#main">Skip to content</a>
 <div class="shell">
 <header class="rail">
-  <a class="brand" href="/"><b>kanaku<span>-</span>pulla</b><small><span lang="ta">கணக்குப்பிள்ளை</span> · payables desk</small></a>
+  <a class="brand" href="/"><b>kanaku<span>-</span>pulla</b><small>payables desk</small></a>
   <nav aria-label="Main">{nav}</nav>
   <div class="rail-foot"><span class="sandbox">● Sandbox</span>
     <button type="button" id="theme-toggle" aria-pressed="false">Switch to dark theme</button></div>
