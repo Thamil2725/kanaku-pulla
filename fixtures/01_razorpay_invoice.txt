@@ -1,0 +1,25 @@
+From: Neha Kamath <neha.kamath@razorpay.com>
+To: payables@ourco.in
+Subject: Invoice RZP/2026/0042 - payment gateway charges, October 2026
+
+Hi team,
+
+Please find our invoice for October payment gateway charges below. Kindly process it by 20 November.
+
+Regards,
+Neha Kamath
+Manager - Finance Controller, Razorpay
+
+------------------------------------------------------------
+TAX INVOICE
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0042
+Invoice Date: 01-Nov-2026
+PO No: PO-2026-118
+Bill To: OurCo Technologies Pvt Ltd
+Description: Payment gateway fees, October 2026 (1,240 transactions)
+Amount: INR 1,18,000.00 (incl. GST 18%)
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123
+------------------------------------------------------------

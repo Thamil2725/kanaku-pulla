@@ -1,0 +1,13 @@
+From: Razorpay Accounts <accounts@razorpay.com>
+To: payables@ourco.in
+Subject: Reminder: outstanding invoice RZP-2026-42
+
+Hello,
+
+Our records show invoice RZP-2026-42 is still outstanding. Please arrange payment at the earliest.
+
+Razorpay (Razorpay Software Pvt. Ltd.)
+Invoice #: RZP-2026-42
+Amount Due: ₹118000
+Pay to: Razorpay Software Pvt. Ltd.
+Bank: HDFC Bank, A/c No: 50200012345678, IFSC: HDFC0000123

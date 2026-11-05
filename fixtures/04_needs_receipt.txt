@@ -1,0 +1,24 @@
+From: Neha Kamath <neha.kamath@razorpay.com>
+To: payables@ourco.in
+Subject: Invoice RZP/2026/0057 - payroll onboarding
+
+Hi team,
+
+Sharing the invoice for the one-time payroll onboarding we completed for you this week.
+
+Regards,
+Neha Kamath
+Manager - Finance Controller, Razorpay
+
+TAX INVOICE
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0057
+Invoice Date: 05-Nov-2026
+PO No: PO-2026-131
+Description: Payroll onboarding, one-time setup
+Subtotal: INR 50,000.00
+GST (18%): INR 9,000.00
+Total: INR 59,000.00
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123

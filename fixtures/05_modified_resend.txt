@@ -1,0 +1,15 @@
+From: Razorpay Accounts <accounts@razorpay.com>
+To: payables@ourco.in
+Subject: Revised invoice RZP/2026/0042
+
+Hello,
+
+Please ignore the earlier copy. The revised amount for invoice RZP/2026/0042 is below.
+
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0042
+PO No: PO-2026-118
+Amount Due: INR 1,81,000.00
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123

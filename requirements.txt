@@ -1,0 +1,7 @@
+anthropic
+httpx
+pydantic
+truststore
+fastapi
+uvicorn[standard]
+python-multipart

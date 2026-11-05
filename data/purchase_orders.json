@@ -1,0 +1,32 @@
+[
+  {
+    "po_number": "PO-2026-118",
+    "vendor_id": "V-RZP",
+    "description": "Payment gateway services, FY 2026-27",
+    "approved_amount": 1500000,
+    "approved_by": "finance-head@munim.local (Head of Finance)",
+    "approved_on": "2026-04-02",
+    "requested_by": "ops-lead@munim.local",
+    "status": "approved",
+    "receipts": [
+      {
+        "id": "GRN-2026-311",
+        "amount": 118000,
+        "note": "October 2026 gateway usage reconciled against the Razorpay dashboard",
+        "recorded_by": "ops-lead@munim.local",
+        "recorded_at": "2026-11-02"
+      }
+    ]
+  },
+  {
+    "po_number": "PO-2026-131",
+    "vendor_id": "V-RZP",
+    "description": "Payroll onboarding (one-time setup)",
+    "approved_amount": 59000,
+    "approved_by": "finance-head@munim.local (Head of Finance)",
+    "approved_on": "2026-10-20",
+    "requested_by": "ops-lead@munim.local",
+    "status": "approved",
+    "receipts": []
+  }
+]
