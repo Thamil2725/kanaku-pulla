@@ -68,6 +68,15 @@ def payout(idempotency_key, account, ifsc, amount_paise, currency):
         conn.close()
 
 
+def clear():
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute("DELETE FROM payouts")
+    finally:
+        conn.close()
+
+
 def all_payouts():
     conn = _connect()
     try:

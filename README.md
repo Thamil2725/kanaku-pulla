@@ -89,7 +89,7 @@ python -m munim run fixtures/0[2-5]*.txt
 python -m munim provide <case-id> --receipt "Payroll onboarding done 5 Nov" --by ops-lead@munim.local
 python -m munim ledger
 
-uvicorn munim.web:app --reload    # http://127.0.0.1:8000
+uvicorn munim.web:app --reload    # http://127.0.0.1:8000 (samples, hold → receipt → paid, ledger vs bank)
 
 python -m pytest tests            # 33 offline tests: temp databases, recorded Crustdata answers, real crash test
 python -m munim issues            # anything found while upgrading an older database

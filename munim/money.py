@@ -33,8 +33,23 @@ def rupees_to_paise(value):
     return to_paise(format(Decimal(str(value)), "f"))
 
 
+def group_indian(n: int) -> str:
+    """1500000 -> '15,00,000' (lakh and crore grouping, as Indian invoices write it)."""
+    s = str(n)
+    if len(s) <= 3:
+        return s
+    head, tail = s[:-3], s[-3:]
+    parts = []
+    while len(head) > 2:
+        parts.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        parts.insert(0, head)
+    return ",".join(parts) + "," + tail
+
+
 def fmt(paise):
     if paise is None:
         return "unknown amount"
     rupees, p = divmod(int(paise), 100)
-    return f"₹{rupees:,}.{p:02d}"
+    return f"₹{group_indian(rupees)}.{p:02d}"

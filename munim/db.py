@@ -120,6 +120,14 @@ def connect(path=None) -> sqlite3.Connection:
     return conn
 
 
+def clear_cases(conn):
+    """Start a fresh demo: remove cases, evidence, the ledger, receipts and messages.
+    Keeps the Crustdata cache (so a rerun costs no credits) and any upgrade reports."""
+    with conn:
+        for table in ("cases", "events", "evidence", "payments", "receipt_allocations", "outbox", "receipts"):
+            conn.execute(f"DELETE FROM {table}")
+
+
 def _columns(conn, table):
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 

@@ -203,6 +203,12 @@ changes by phone, and onboarding new suppliers automatically.
   resend; a test covers a sender whose profile lists an ended role writing from the real domain. Considered but not
   built: judging a bill by the supplier's headcount, and flagging home addresses. Both would turn away honest small
   businesses, and the payment already requires an approved order and a team-confirmed delivery. 33 tests pass.
+- **2026-11-06, new web page:** a checklist of the payment rules on every bill (OK, needs evidence, blocks payment,
+  or not checked), a step-by-step record of what Munim did, the receipt form pre-filled with the person who was asked,
+  a books-versus-bank check on the home and ledger pages, light and dark themes, and rupee amounts written the Indian
+  way (₹1,18,000.00). Checked in a browser on a throwaway copy: every sample, and a hold → receipt → paid run, through
+  the page itself; an automated accessibility audit (axe-core, WCAG 2.2 AA) found no problems on any page in either
+  theme; keyboard use works, including a skip link; nothing scrolls sideways on a phone-width screen.
 
 ## Verification summary (2026-11-06)
 
