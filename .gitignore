@@ -5,3 +5,5 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+open-router-key.txt
+*-key.txt
