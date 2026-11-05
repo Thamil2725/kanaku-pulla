@@ -1,0 +1,14 @@
+From: Neha Kamath <neha.kamath@razorpay.com>
+To: payables@ourco.in
+Subject: Invoice RZP/2026/0121
+
+Hi team,
+
+Sharing the invoice for the settlement reconciliation service. The amount is as agreed on our call.
+
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0121
+PO No: PO-2026-118
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123

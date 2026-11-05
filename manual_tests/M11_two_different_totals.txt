@@ -1,0 +1,19 @@
+From: Neha Kamath <neha.kamath@razorpay.com>
+To: payables@ourco.in
+Subject: Invoice RZP/2026/0117
+
+Hi team,
+
+Invoice for dashboard analytics, October and November.
+
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0117
+PO No: PO-2026-118
+Total: INR 59,000.00
+
+Payment summary
+Total: INR 95,000.00
+
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123

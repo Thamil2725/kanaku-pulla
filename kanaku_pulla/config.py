@@ -71,8 +71,20 @@ def gemini_key() -> str:
     return (os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "").strip()
 
 
+OPENROUTER_KEY_FILE = ROOT / "open-router-key.txt"  # git-ignored; one line, the key (or OPENROUTER_API_KEY=...)
+
+
 def openrouter_key() -> str:
-    return os.environ.get("OPENROUTER_API_KEY", "").strip()
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        for line in OPENROUTER_KEY_FILE.read_text(encoding="utf-8-sig").splitlines():
+            if line.strip():
+                return line.split("=", 1)[-1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return ""
 
 
 GEMINI_MODEL = os.environ.get("KANAKU_GEMINI_MODEL", "gemini-3.5-flash-lite")

@@ -67,7 +67,7 @@ AMOUNT_LABELS = {"grand total": 0, "total amount": 0, "total payable": 0, "amoun
                  "amount due": 1, "balance due": 1, "total": 2, "amount": 3}
 AMOUNT_RE = re.compile(
     r"(?<![a-z\-])(grand total|total amount|total payable|amount payable|amount due|balance due|total|amount)"
-    r"\s*(?:\([^)]*\))?\s*[:=]\s*(?:INR|Rs\.?|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?)",
+    r"\s*(?:\([^)]*\))?\s*[:=]\s*(?:INR|Rs\.?|₹|USD|EUR|GBP|AED|SGD|US\$|\$|€|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)",
     re.IGNORECASE)
 
 

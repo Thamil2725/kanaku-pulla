@@ -1,0 +1,14 @@
+From: Billing Team <billing@acme-cloud.example>
+To: payables@ourco.in
+Subject: Invoice AC-7781 for cloud hosting
+
+Hello,
+
+Thank you for your business. Please find our invoice below.
+
+Acme Cloud Services Pvt Ltd
+Invoice No: AC-7781
+Amount: INR 35,400.00
+Pay to: Acme Cloud Services Pvt Ltd
+A/c No: 30440022110099
+IFSC: SBIN0004321

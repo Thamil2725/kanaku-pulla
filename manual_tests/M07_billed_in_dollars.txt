@@ -1,0 +1,15 @@
+From: Neha Kamath <neha.kamath@razorpay.com>
+To: payables@ourco.in
+Subject: Invoice RZP/2026/0115 - international payments add-on
+
+Hi team,
+
+Invoice for the international payments add-on, billed in US dollars.
+
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0115
+PO No: PO-2026-118
+Amount: USD 1,400.00
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123

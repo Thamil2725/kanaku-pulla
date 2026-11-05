@@ -1,0 +1,17 @@
+From: Neha Kamath <neha.kamath@rnazorpay.com>
+To: payables@ourco.in
+Subject: Invoice RZP/2026/0119 - due today
+
+Hi team,
+
+Please clear this today to avoid interruption of service.
+
+Regards,
+Neha Kamath
+
+Razorpay Software Private Limited
+Invoice No: RZP/2026/0119
+Amount: INR 47,200.00
+Pay to: Razorpay Software Private Limited
+A/c No: 50200012345678
+IFSC: HDFC0000123

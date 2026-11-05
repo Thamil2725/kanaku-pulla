@@ -1,0 +1,10 @@
+from: Neha Kamath <neha.kamath@razorpay.com>
+subject: inv for payroll setup!!
+
+hi, pls process asap. thx
+
+razorpay software pvt. ltd.   |   invoice # RZP-2026-0112   |   po no: PO-2026-131
+subtotal: inr 50,000.00
+gst (18%): inr 9,000.00
+total: INR 59,000.00
+pay to: Razorpay Software Pvt. Ltd. -- A/c No: 50200012345678 -- IFSC: HDFC0000123
