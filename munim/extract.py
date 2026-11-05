@@ -111,16 +111,36 @@ def best_amount(raw: str):
     return Extracted(value=f"{top[0]['value']:.2f}", quote=top[0]["quote"]), False
 
 
+CURRENCY_RE = re.compile(r"\b(INR|USD|EUR|GBP|AED|SGD)\b|(₹|Rs\.?(?=\s*\d)|US\$|\$|€|£)")
+SYMBOLS = {"₹": "INR", "Rs": "INR", "Rs.": "INR", "US$": "USD", "$": "USD", "€": "EUR", "£": "GBP"}
+
+
+def currency_mentions(raw: str):
+    """Every currency the text mentions, as ISO codes, with the text that mentioned it."""
+    out = []
+    for m in CURRENCY_RE.finditer(raw):
+        code = m.group(1) or SYMBOLS.get(m.group(2).strip())
+        if code:
+            out.append((code, m.group(0)))
+    return out
+
+
+def currency_reading(raw: str):
+    """(Extracted, conflicting). Conflicting when the text names more than one currency."""
+    mentions = currency_mentions(raw)
+    codes = {code for code, _ in mentions}
+    if len(codes) != 1:
+        return Extracted(), len(codes) > 1
+    return Extracted(value=mentions[0][0], quote=mentions[0][1]), False
+
+
 def _extract_with_regex(raw: str) -> InvoiceFields:
     sender = re.search(r"^From:\s*(.*?)\s*<([^>]+)>", raw, re.IGNORECASE | re.MULTILINE)
     sender_name = Extracted(value=sender.group(1).strip(), quote=sender.group(0)) if sender else Extracted()
     sender_email = Extracted(value=sender.group(2).strip(), quote=sender.group(0)) if sender else Extracted()
 
     amount, _ = best_amount(raw)
-    currency_hit = re.search(r"\b(INR|USD|EUR)\b|₹|Rs\.?", raw)
-    currency = Extracted(value="INR" if currency_hit and currency_hit.group(1) in (None, "INR") else
-                         (currency_hit.group(1) if currency_hit else None),
-                         quote=currency_hit.group(0) if currency_hit else None)
+    currency, _ = currency_reading(raw)
 
     lowered = raw.lower()
     injections = [m.group(0).strip() for m in re.finditer(

@@ -33,34 +33,44 @@ vendor email ─► read ─► who is the vendor? ─► is the sender real? �
 4. **Check the money is owed:** an approved purchase order covers it and a receipt shows it was delivered.
 5. **Decide** with fixed rules ([`munim/policy.py`](munim/policy.py)), never the model, so the same case gets the
    same answer however it is worded. See [When Munim pays](#when-munim-pays).
-6. **Explain.** Claude writes a memo where every claim cites evidence (`E3`); code rejects any uncited claim and asks
-   again, then falls back to a plain memo. Facts, inferences and "could not verify" are kept apart.
-7. **Act.** Reserve the debt in the ledger, pay through the bank with an idempotency key, then settle. A crash at any
-   point resumes from the saved step without paying twice.
+6. **Explain.** Code renders the memo from the evidence records: verified facts are the exact evidence summaries
+   (source + retrieval time), email claims are labelled as claims, reasoning is the policy's own findings, failed
+   lookups are "could not verify". Claude may add a short summary, shown separately and labelled model-written.
+   The status line ("Paid …") is read from the ledger, never from the memo.
+7. **Act.** In one `BEGIN IMMEDIATE` transaction, re-check the PO's unspent authorisation and the receipt, then reserve
+   the invoice and allocate the receipt. Commit, then pay through the bank with a stable idempotency key (outside any
+   transaction), then settle. A crash at any point resumes from the saved step; a reservation is never released on a
+   timeout, because the bank may already have paid.
 8. **Hand over only the exception,** naming the smallest missing evidence and asking the one team member who can
    supply it. When they answer, Munim checks the answer and finishes the same case.
 
 ## When Munim pays
 
-All of these must hold:
+All of these must hold ([`munim/policy.py`](munim/policy.py), also shown at `/policy`):
 
 1. The vendor is in our register, matched by its registered domain or Crustdata company id
-2. The email came from the vendor's registered domain
-3. The bank account matches the one in our register
-4. An approved purchase order for this vendor covers the amount
-5. A receipt shows the goods or service were delivered
-6. This invoice number has not been paid or reserved before
-7. The amount is within the auto-pay limit
-8. The sender is an approved contact, verified at the vendor, or a vendor mailbox on the registered domain
+2. The email's claimed sender address is on the vendor's registered domain (a consistency check, not authentication)
+3. The invoice is in a supported currency (INR only) that matches the vendor, purchase order and receipt
+4. The bank account number **and** IFSC match our register
+5. An approved purchase order has enough unspent authorisation (reserved and paid amounts both count)
+6. A receipt from our team shows delivery, and no other payment has been allocated that receipt
+7. This invoice number has not been paid or reserved before
+8. The amount is within the auto-pay limit
+9. Nothing about the named sender contradicts the claim (no look-alike domain, no ended role)
 
-Rejected outright: lookalike domains, and a resend of an already-paid invoice with a different amount or account.
+Rejected outright: look-alike domains, and a resend of an already-paid invoice with any different payment detail.
+
+**What authorises a payment is our own records** (vendor register, purchase order, team receipt). The email's
+`From:` line is pasted text, so Munim records it as an unauthenticated *claim*; public-profile checks can stop a
+payment but never authorise one. There is no "approve anyway": a hold clears only when its specific missing
+evidence is supplied, and the full policy is re-run. People can always reject.
 
 ## The demo cases (`fixtures/`)
 
 | # | What comes in | What Munim does |
 |---|---|---|
-| 1 | Razorpay's October invoice, from their finance controller | Pays it. Run with `MUNIM_CRASH_AT=after_bank` to kill the process after the bank pays; `resume` settles it with one payout. |
-| 2 | "Our HDFC account is frozen, pay our new ICICI account today", from `razorpay-payments.in`, signed by a real former Razorpay finance manager, with a hidden "skip verification" note | Rejects it: lookalike domain, sender left Razorpay in June 2024 (Crustdata), bank account differs from our register, embedded instruction ignored. |
+| 1 | Razorpay's October invoice, claiming to be from their finance controller, citing an approved PO with a team receipt | Pays it. Run with `MUNIM_CRASH_AT=after_bank` to kill the process after the bank pays; `resume` settles it with one payout. |
+| 2 | "Our HDFC account is frozen, pay our new ICICI account today", from `razorpay-payments.in`, signed with the name of a real former Razorpay finance manager, with a hidden "skip verification" note | Rejects it: look-alike domain; the named person's public profile lists their Razorpay role as ended in June 2024 (Crustdata); account and IFSC differ from our register; embedded instruction ignored. |
 | 3 | The same invoice resent from `accounts@razorpay.com` as "RZP-2026-42" under "Razorpay Software Pvt. Ltd." | Duplicate: same company, same invoice; points to the ledger entry that paid it. |
 | 4 | A payroll onboarding invoice with a valid PO but no delivery receipt | Holds it and asks the ops lead for one thing: a receipt. When they record it, Munim pays the same case. |
 | 5 | A "revised" copy of invoice 1 asking for ₹1,81,000 | Rejects it: the invoice is already paid for ₹1,18,000; a real change needs a new invoice or debit note. |
@@ -79,9 +89,15 @@ python -m munim provide <case-id> --receipt "Payroll onboarding done 5 Nov" --by
 python -m munim ledger
 
 uvicorn munim.web:app --reload    # http://127.0.0.1:8000
+
+python -m pytest tests            # 31 offline tests: temp databases, recorded Crustdata answers, real crash test
+python -m munim issues            # anything found while upgrading an older database
 ```
 
-Without an Anthropic key Munim still runs: the regex reader and a template memo take over, and the memo says so.
+Without an Anthropic key Munim still runs: the regex reader takes over and the memo is rule-written, and the page
+says which was used. The tests force that mode (`MUNIM_OFFLINE=1`, `MUNIM_NO_LLM=1`), so they never call live
+services. `tests/crustdata_cache.json` holds the six recorded Crustdata answers, with person profiles trimmed to the
+fields Munim uses.
 
 ## How it's built
 
@@ -92,8 +108,14 @@ Without an Anthropic key Munim still runs: the regex reader and a template memo 
   `/company/enrich` for vendors not in the register. Responses are cached with their retrieval time and refetched
   after 24 hours; failures are retried with backoff and, if they persist, recorded as "could not verify".
 - **Exactly once:** the payment key is vendor + normalized invoice number (not amount), reserved in the ledger before
-  the bank call. The bank refuses a reused key with different details.
-- **Team only:** every outgoing message is checked against `MUNIM_TEAM_EMAILS`; Munim never contacts a vendor.
+  the bank call. The bank refuses a reused key if account, IFSC, amount or currency differ.
+- **Receipts and PO budgets:** `receipt_allocations` gives each receipt one payment (receipt ids are globally unique);
+  PO capacity counts reserved and paid amounts, re-checked inside the reservation transaction.
+- **Money:** integer paise parsed with `Decimal`; malformed, zero, negative or non-finite amounts are rejected.
+- **Upgrades:** `db.migrate` upgrades older databases in place (adds paise columns, backfills receipt allocations) and
+  records conflicts in `migration_issues` instead of deleting anything.
+- **Team only:** every outgoing message is checked against `MUNIM_TEAM_EMAILS`; Munim never contacts a vendor. The
+  team member who records a receipt is a typed-in sandbox identity, checked against that list but not authenticated.
 
 ## Approaches we considered
 
@@ -105,9 +127,12 @@ Without an Anthropic key Munim still runs: the regex reader and a template memo 
 - **Approve/reject queue for humans.** Replaced by "the smallest missing evidence": a hold names what would let it
   pay, asks the right person, and resumes the same case when they answer.
 
-We had two outside reviews of the plan mid-build (GPT models via Codex). They found real holes we then fixed: the payment key
-included the amount (a changed resend could pay twice), we were verifying companies but not debts (no PO or receipt),
-the regex reader could take a subtotal, and the cache never expired.
+We had outside reviews during the build (GPT models via Codex). The first round found that the payment key included
+the amount (a changed resend could pay twice), that we were verifying companies but not debts (no PO or receipt),
+that the regex reader could take a subtotal, and that the cache never expired. A second review of commit `d5c957c`
+reproduced five more problems, each now covered by a test: two invoices could share one receipt or overspend a PO;
+currency and IFSC weren't checked; "Approve anyway" bypassed every control; model prose could pass as a cited fact;
+and the pasted sender was treated as more than a claim. See `MUNIM_EXPLAINED.md` for the plain-language status.
 
 ## What worked and what didn't
 
@@ -115,8 +140,10 @@ the regex reader could take a subtotal, and the cache never expired.
   confidence (0.6). Munim only trusts a name when the sending domain or our register agrees, and records the ambiguity.
 - **Alternate domains are noisy.** Crustdata lists `bitly.com` among Razorpay's domains (marketing links). Munim treats
   a domain that appears only in that list as a hold, not a match.
-- **Profiles describe employment, not authority.** A current finance title is supporting evidence, never enough on
-  its own; payment needs the register, the PO and the receipt.
+- **Profiles describe what a profile lists, not employment or authority.** Evidence says "the public profile of X
+  lists…", with the role dates the profile gives and the time we retrieved it. It can stop a payment, never authorise one.
+- **Not yet tested:** the Claude reading and summary paths (no API key during the build), and the payment lock under
+  many truly simultaneous processes (tested with two interleaved connections).
 - **Campus TLS interception** broke Python's certificate checks; we use the OS trust store (`truststore`) instead of
   turning verification off.
 

@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS payments (
     case_id        TEXT NOT NULL,
     vendor_id      TEXT NOT NULL,
     invoice_number TEXT NOT NULL,
-    amount         REAL NOT NULL,
+    amount         REAL NOT NULL,       -- display only; decisions use amount_paise
+    amount_paise   INTEGER,
     currency       TEXT NOT NULL,
     account        TEXT NOT NULL,
     ifsc           TEXT,
@@ -64,7 +65,27 @@ CREATE TABLE IF NOT EXISTS receipts (
     note        TEXT,
     recorded_by TEXT NOT NULL,
     recorded_at TEXT NOT NULL,
-    case_id     TEXT
+    case_id     TEXT,
+    currency    TEXT
+);
+-- Each delivery receipt can back exactly one payment. Receipt ids are globally unique
+-- (seeded ids like GRN-2026-311 and team-recorded GRN-xxxxxx share one namespace).
+CREATE TABLE IF NOT EXISTS receipt_allocations (
+    receipt_id   TEXT PRIMARY KEY,
+    po_number    TEXT NOT NULL,
+    payment_key  TEXT NOT NULL,
+    case_id      TEXT NOT NULL,
+    amount_paise INTEGER NOT NULL,
+    currency     TEXT,
+    created_at   TEXT NOT NULL
+);
+-- Problems found while upgrading an older database. Reported, never silently "fixed" by deleting rows.
+CREATE TABLE IF NOT EXISTS migration_issues (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,
+    detail     TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (kind, detail)
 );
 CREATE TABLE IF NOT EXISTS outbox (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,7 +116,46 @@ def connect(path=None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    migrate(conn)
     return conn
+
+
+def _columns(conn, table):
+    return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def migrate(conn):
+    """Upgrade databases created by earlier versions in place. Safe to run on every connect."""
+    from .money import rupees_to_paise
+
+    with conn:
+        if "amount_paise" not in _columns(conn, "payments"):
+            conn.execute("ALTER TABLE payments ADD COLUMN amount_paise INTEGER")
+        for row in conn.execute("SELECT id, amount FROM payments WHERE amount_paise IS NULL").fetchall():
+            conn.execute("UPDATE payments SET amount_paise = ? WHERE id = ?", (rupees_to_paise(row["amount"]), row["id"]))
+        if "currency" not in _columns(conn, "receipts"):
+            conn.execute("ALTER TABLE receipts ADD COLUMN currency TEXT")  # legacy rows stay NULL: currency unknown
+
+        # Older versions recorded receipt_id on payments without a uniqueness rule. Allocate each
+        # receipt to the first payment that used it; report any later reuse instead of deleting it.
+        rows = conn.execute(
+            "SELECT * FROM payments WHERE receipt_id IS NOT NULL AND status IN ('reserved', 'paid') ORDER BY id"
+        ).fetchall()
+        for row in rows:
+            taken = conn.execute("SELECT * FROM receipt_allocations WHERE receipt_id = ?", (row["receipt_id"],)).fetchone()
+            if taken is None:
+                conn.execute(
+                    "INSERT INTO receipt_allocations (receipt_id, po_number, payment_key, case_id, amount_paise, "
+                    "currency, created_at) VALUES (?,?,?,?,?,?,?)",
+                    (row["receipt_id"], row["po_number"] or "", row["payment_key"], row["case_id"],
+                     row["amount_paise"], row["currency"], row["created_at"]))
+            elif taken["payment_key"] != row["payment_key"]:
+                conn.execute(
+                    "INSERT OR IGNORE INTO migration_issues (kind, detail, created_at) VALUES (?,?,?)",
+                    ("shared_receipt",
+                     f"Receipt {row['receipt_id']} backs payment {taken['payment_key']} (case {taken['case_id']}) and "
+                     f"also payment {row['payment_key']} (case {row['case_id']}); both payments are kept, the receipt "
+                     f"is allocated to the first", now()))
 
 
 def log_event(conn, case_id, step, message, level="info", evidence=None):

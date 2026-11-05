@@ -46,7 +46,15 @@ TEAM_EMAILS = [
 CRASH_AT = os.environ.get("MUNIM_CRASH_AT", "").strip()
 
 
+# Test switches: OFFLINE means cache only (no live Crustdata calls); NO_LLM forces the regex reader
+# and template explanations even if an Anthropic key is present.
+OFFLINE = os.environ.get("MUNIM_OFFLINE", "") == "1"
+NO_LLM = os.environ.get("MUNIM_NO_LLM", "") == "1"
+
+
 def crustdata_key() -> str:
+    if OFFLINE:
+        return ""
     key = os.environ.get("CRUSTDATA_API_KEY", "").strip()
     if key:
         return key
@@ -59,4 +67,6 @@ def crustdata_key() -> str:
 
 
 def anthropic_available() -> bool:
+    if NO_LLM:
+        return False
     return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))

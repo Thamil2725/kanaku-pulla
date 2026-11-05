@@ -2,13 +2,20 @@
   {
     "vendor_id": "V-RZP",
     "legal_name": "Razorpay Software Private Limited",
-    "aliases": ["Razorpay", "Razorpay Software Pvt Ltd", "Razorpay Software Pvt. Ltd."],
+    "aliases": [
+      "Razorpay",
+      "Razorpay Software Pvt Ltd",
+      "Razorpay Software Pvt. Ltd."
+    ],
     "crustdata_company_id": 897127,
     "registered_domain": "razorpay.com",
     "bank_account_number": "50200012345678",
     "bank_ifsc": "HDFC0000123",
-    "approved_contacts": ["neha.kamath@razorpay.com"],
+    "approved_contacts": [
+      "neha.kamath@razorpay.com"
+    ],
     "onboarded_on": "2025-04-01",
-    "note": "Bank details are sandbox values for the demo."
+    "note": "Bank details are sandbox values for the demo.",
+    "currency": "INR"
   }
 ]

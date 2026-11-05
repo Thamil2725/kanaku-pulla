@@ -12,6 +12,7 @@ from fastapi import FastAPI, Form, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import bank, config, db, pipeline, policy
+from .money import fmt, to_paise
 
 app = FastAPI(title="Munim")
 FIXTURES = config.ROOT / "fixtures"
@@ -69,8 +70,8 @@ def home():
     for r in rows:
         s = json.loads(r["state"])
         f = s.get("fields") or {}
-        amt = f"₹{float(f['amount']):,.0f}" if f.get("amount") else "—"
-        head = (s.get("memo") or {}).get("headline", "")
+        amt = fmt(to_paise(f.get("amount"))) if to_paise(f.get("amount")) else "—"
+        head = pipeline.describe_status(conn, r["id"])
         trs.append(f"<tr><td><a href='/cases/{r['id']}'>{r['id']}</a></td><td>{badge(r['status'])}</td>"
                    f"<td>{escape(f.get('sender_email') or '')}<div class='muted'>{escape(f.get('invoice_number') or '')}"
                    f"</div></td><td>{amt}</td><td>{escape(head)}</td></tr>")
@@ -137,14 +138,17 @@ def show_case(case_id: str):
 <div class="row" style="margin-top:8px"><button>Record receipt and continue</button></div></form>"""
         action = f"""<div class="card"><h2>To pay this, Munim needs</h2><ul>{need_list}</ul>{receipt_form}
 <form method="post" action="/cases/{case_id}/resolve" class="row" style="margin-top:10px">
-<button class="ghost" name="action" value="approve">Approve anyway</button>
-<button class="ghost" name="action" value="reject">Reject</button></form></div>"""
+<button class="ghost" name="action" value="reject">Reject (no payment)</button>
+<span class="muted">There is no "approve anyway": a hold clears only when its missing evidence is supplied.</span>
+</form></div>"""
 
     def src_link(e):
         return f" <a href='{escape(e['url'])}' target='_blank' rel='noopener'>source</a>" if e.get("url") else ""
 
+    kinds = {"fact": "source", "claim": "email claim", "inference": "reasoning", "unavailable": "could not check"}
     ev_rows = "".join(
-        f"<tr class='ev' id='{e['id']}'><td><b>{e['id']}</b><div class='kind'>{escape(e['kind'])}</div></td>"
+        f"<tr class='ev' id='{e['id']}'><td><b>{e['id']}</b><div class='kind'>{escape(kinds.get(e['kind'], e['kind']))}"
+        f"</div></td>"
         f"<td>{escape(e['summary'])}{src_link(e)}</td>"
         f"<td class='muted'>{escape(e['source'])}<br>{escape((e['retrieved_at'] or '')[:16].replace('T', ' '))} UTC</td></tr>"
         for e in db.get_evidence(conn, case_id))
@@ -156,16 +160,23 @@ def show_case(case_id: str):
         f"<tr><td>{escape(o['to_addr'])}</td><td>{escape(o['subject'])}<details><summary>message</summary>"
         f"<pre>{escape(o['body'])}</pre></details></td></tr>"
         for o in conn.execute("SELECT * FROM outbox WHERE case_id = ? ORDER BY id", (case_id,)))
-    amt = f"₹{float(f['amount']):,.2f}" if f.get("amount") else "amount unknown"
+    amt = (f"{fmt(to_paise(f.get('amount')))} {escape(f.get('currency') or '')} (as claimed)"
+           if to_paise(f.get("amount")) else "amount unclear")
     body = f"""
 <p class="muted"><a href="/">← Cases</a> · {escape(row['source_name'] or '')}</p>
 <h1>{escape(f.get('vendor_name') or 'Unknown vendor')} · {escape(f.get('invoice_number') or '')} · {amt}</h1>
-<div class="banner {cls}">{badge(row['status'])} &nbsp;{escape(m.get('headline', ''))}</div>
+<div class="banner {cls}">{badge(row['status'])} &nbsp;{escape(pipeline.describe_status(conn, case_id))}</div>
 {action}
-<div class="card">{section('Verified facts', 'verified_facts')}{section('Reasoning', 'inferences')}
-{section('Could not verify', 'could_not_verify')}<p><b>Next:</b> {escape(m.get('next_step', ''))}</p>
-<p class="muted">Memo written by {escape(s.get('memo_method', '?'))}; email read by {escape(s.get('extract_method', '?'))}.
-The decision itself comes from fixed rules (<a href="/policy">policy</a>), not the model.</p></div>
+<div class="card"><p><b>{escape(m.get('headline', ''))}</b></p>
+{section('Verified facts (from a source, with retrieval time)', 'verified_facts')}
+{section('What the email claims (not verified)', 'claims')}
+{section('Reasoning (policy findings)', 'inferences')}
+{section('Could not verify', 'could_not_verify')}
+{section('Model-written summary (cites evidence; not machine-proven)', 'model_summary')}
+<p><b>Next:</b> {escape(m.get('next_step', ''))}</p>
+<p class="muted">Email read by {escape(s.get('extract_method', '?'))}; memo by {escape(s.get('memo_method', '?'))}.
+The decision comes from fixed rules (<a href="/policy">policy</a>), not the model. The status line above is read from
+the ledger, not from the memo.</p></div>
 <div class="card"><h2>Evidence</h2><table><tr><th>Id</th><th>What it says</th><th>Source, retrieved</th></tr>{ev_rows}</table></div>
 <div class="card"><h2>Timeline</h2><table>{events}</table></div>
 <div class="card"><h2>Messages to the team</h2><table>{sent or '<tr><td class=muted>None</td></tr>'}</table></div>
@@ -187,7 +198,7 @@ def provide(case_id: str, by: str = Form(...), note: str = Form(...)):
 def resolve(case_id: str, action: str = Form(...)):
     conn = db.connect()
     try:
-        pipeline.human_resolve(conn, case_id, "approve" if action == "approve" else "reject", who="ap-lead")
+        pipeline.human_resolve(conn, case_id, action, who="ap-lead")  # anything but "reject" is refused
     except ValueError as exc:
         return page("Not accepted", f"<div class='banner bad'>{escape(str(exc))}</div><a href='/cases/{case_id}'>Back</a>")
     return RedirectResponse(f"/cases/{case_id}", status_code=303)
@@ -207,11 +218,14 @@ def ledger():
     conn = db.connect()
     ours = "".join(
         f"<tr><td>{escape(p['vendor_id'])} · {escape(p['invoice_number'])}<div class='muted'>{escape(p['po_number'] or '')}"
-        f"</div></td><td>₹{p['amount']:,.2f}</td><td>…{escape(p['account'][-4:])}</td><td>{badge('PAID' if p['status'] == 'paid' else 'RUNNING')}"
+        f" · {escape(p['receipt_id'] or '')}</div></td><td>{fmt(p['amount_paise'])} {escape(p['currency'])}</td>"
+        f"<td>…{escape(p['account'][-4:])}<div class='muted'>{escape(p['ifsc'] or '')}</div></td>"
+        f"<td>{badge('PAID') if p['status'] == 'paid' else '<span class=\"badge hold\">Reserved</span>'}"
         f"</td><td><a href='/cases/{p['case_id']}'>{p['case_id']}</a></td></tr>"
         for p in conn.execute("SELECT * FROM payments ORDER BY id"))
     theirs = "".join(
-        f"<tr><td>{escape(p['reference'])}</td><td>₹{p['amount']:,.2f}</td><td>…{escape(p['account'][-4:])}</td>"
+        f"<tr><td>{escape(p['reference'])}</td><td>{fmt(p['amount_paise'])} {escape(p['currency'])}</td>"
+        f"<td>…{escape(p['account'][-4:])}<div class='muted'>{escape(p['ifsc'] or '')}</div></td>"
         f"<td class='muted'>{escape(p['idempotency_key'][:12])}…</td></tr>" for p in bank.all_payouts())
     body = f"""<h1>Ledger</h1><p class="muted">Our books on the left, the bank's on the right. They should always agree:
 one payout per invoice, whatever crashed or was resent.</p><div class="grid2">

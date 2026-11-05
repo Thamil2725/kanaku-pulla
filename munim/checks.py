@@ -136,7 +136,7 @@ def resolve_vendor(conn, case_id, cd, fields):
                 domain_company = _company_brief(matches[0])
                 out["evidence"].append(db.add_evidence(
                     conn, case_id, "fact", "crustdata:/company/identify",
-                    f"Sending domain {sender_domain} belongs to {domain_company['name']} "
+                    f"Crustdata matches the domain {sender_domain} to {domain_company['name']} "
                     f"(Crustdata company {domain_company['crustdata_company_id']}, primary domain "
                     f"{domain_company['primary_domain']})",
                     data=domain_company, url=domain_company.get("profile_url"),
@@ -238,15 +238,16 @@ def verify_sender(conn, case_id, cd, fields, resolution):
         out["approved_contact"] = True
         out["evidence"].append(db.add_evidence(
             conn, case_id, "fact", "register",
-            f"{sender_email} is an approved billing contact for {claimed['legal_name']} in our register"))
+            f"The claimed sender address {sender_email} matches an approved billing contact for "
+            f"{claimed['legal_name']} in our register (an address match, not proof of who sent the email)"))
 
     words = {w.lower() for w in re.split(r"[^A-Za-z-]+", sender_name) if w}
     if not sender_name or words & ROLE_WORDS:
         out["status"] = "role_mailbox"
         out["evidence"].append(db.add_evidence(
             conn, case_id, "inference", "munim",
-            f"Sender '{sender_name or sender_email}' is a shared mailbox, not a person, so employment "
-            f"cannot be checked"))
+            f"The claimed sender '{sender_name or sender_email}' is a shared mailbox, not a person, so no "
+            f"public profile can be checked"))
         return out
 
     company_id = (claimed or {}).get("crustdata_company_id") or (resolution.get("company") or {}).get("crustdata_company_id")
@@ -263,7 +264,7 @@ def verify_sender(conn, case_id, cd, fields, resolution):
         out["status"] = "error"
         out["evidence"].append(db.add_evidence(
             conn, case_id, "unavailable", "crustdata:/person/search",
-            f"Could not check {sender_name}'s employment: {exc}", data={"error": str(exc)}))
+            f"Could not look up a public profile for {sender_name}: {exc}", data={"error": str(exc)}))
         return out
 
     best = None
@@ -283,7 +284,8 @@ def verify_sender(conn, case_id, cd, fields, resolution):
         out["status"] = "not_found"
         out["evidence"].append(db.add_evidence(
             conn, case_id, "fact", "crustdata:/person/search",
-            f"No public profile found for {sender_name} at {company_name} (Crustdata company {company_id})",
+            f"Crustdata returned no public profile for {sender_name} with a role at {company_name} "
+            f"(Crustdata company {company_id}); this does not show the person does not exist",
             data={"name": sender_name, "company_id": company_id, "profiles": 0},
             retrieved_at=meta["retrieved_at"]))
         return out
@@ -293,12 +295,12 @@ def verify_sender(conn, case_id, cd, fields, resolution):
     out.update(status=status, title=title, person_id=profile.get("crustdata_person_id"),
                finance_role=any(w in title.lower() for w in FINANCE_WORDS))
     if status == "current":
-        summary = (f"{name} currently works at {company_name} as '{title}' "
-                   f"(since {(role.get('start_date') or '')[:7] or 'unknown'})")
+        summary = (f"The public profile of {name} lists a current role at {company_name}: '{title}' "
+                   f"(start {(role.get('start_date') or '')[:7] or 'not given'}, as stated on the profile)")
     else:
         now_at = "; ".join(f"{e.get('title')} at {e.get('name')}" for e in emp.get("current") or []) or "unknown"
-        summary = (f"{name} left {company_name} in {(role.get('end_date') or '')[:7] or 'an unknown month'} "
-                   f"(last role '{title}'); their profile now shows: {now_at}")
+        summary = (f"The public profile of {name} lists their role at {company_name} ('{title}') as ended "
+                   f"{(role.get('end_date') or '')[:7] or 'on an unstated date'}; current roles listed: {now_at}")
         out["left_on"] = role.get("end_date")
         out["now_at"] = now_at
     out["evidence"].append(db.add_evidence(
