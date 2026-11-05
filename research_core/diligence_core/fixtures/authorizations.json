@@ -1,0 +1,9 @@
+[
+  {
+    "obligation_id": "SYNTHETIC-RECEIPT-001", "company_id": "1001",
+    "invoice_number": "DEMO-INV-001", "amount_minor": 5000000, "currency": "INR",
+    "account": "123456789012", "ifsc": "TEST0000123", "po_number": "DEMO-PO-001",
+    "approved": true, "receipt_confirmed": true,
+    "source": "demo://operator-authorization", "approved_at": "2026-11-06T00:00:00+00:00"
+  }
+]

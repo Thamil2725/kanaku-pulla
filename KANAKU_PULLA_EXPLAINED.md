@@ -245,3 +245,18 @@ changes by phone, and onboarding new suppliers automatically.
 | Live run of the five emails (Crustdata, no Claude) | Same results as the offline tests |
 | A paid bill resent with "-REMINDER" added to its number | Held as a likely resend; pays only after the team confirms a new delivery |
 | A bill naming someone whose profile lists their role as ended, from the supplier's real domain | Held, asking the supplier's registered contact to confirm |
+## Research extension: current integration status
+
+The site has a **Lab procurement** section at `/research`, using the same sidebar, colors and page layout. Its reusable code is now included in this repo under `research_core/` and attached by a small bridge; a separate checkout is no longer required.
+
+- **Implemented:** paste/upload academic materials lists, review suppliers separately from the author, inspect source evidence and geodesic location comparisons, and create a team-only request draft.
+- **Separate outcomes:** research drafts do not change invoice totals, consume purchase orders, or create AP payouts. The existing payables pipeline remains the payment authority.
+- **Demo mode:** the sample people, organizations and coordinates are explicitly fictional. Live Crustdata/Google adapters require configured keys; the independent build verification used synthetic data and mocked HTTP responses.
+- **Careful wording:** a residential address does not prove a shell company; a changed affiliation does not imply fraud. Coordinates can reveal a discrepancy from a trusted reference, and profiles can provide contact leads for review.
+- **Shared reader fixed:** research now uses the same Gemini/OpenRouter/Claude configuration as invoices, including the existing OpenRouter key file. No extra Anthropic key is required. The academic schema has no payment fields; each extracted value must have a supporting quote.
+- **Old held uploads:** retry document reading on the same case, or resubmit the same text. This preserves history and is permitted only before extraction/actions; it cannot reopen payment holds or completed drafts. A downloadable text template works without a model key.
+- **Buying history:** the dashboard now lists the ten most recent paid purchases from the AP ledger, with vendor, PO, invoice, amount, date and case links. Reservations, holds, resends and research drafts do not become purchases.
+- **Verification:** all 41 Core tests and 49 host tests passed after combining with Claude's AP changes. Real OpenRouter extraction of fictional prose also completed one local team draft with quote checks. Crustdata/Google research calls were mocked; this does not claim visual browser verification.
+- **Running site:** `/research` is live on port 8000. A synthetic address-discrepancy case completed a team draft; submitting it again returned the same case and retained one draft. All five research tabs and the existing pages returned HTTP 200, and the AP ledger page was unchanged by the research run.
+
+The integration uses `kanaku_pulla/research_bridge.py`; implementation notes and run instructions are in `research_core/README.md` and `research_core/INTEGRATION.md`. The color/font refresh is a follow-up; existing layouts were retained, with the requested buying section added.

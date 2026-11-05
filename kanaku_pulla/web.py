@@ -404,6 +404,8 @@ def shell(title, body, active="", note="", error=""):
            + item("new", "/new", "New invoice")
            + item("exceptions", "/exceptions", "Exceptions", holds)
            + item("cases", "/cases", "All cases", total, quiet=True)
+           + '</ul><p class="group" id="nav-research" style="margin-top:14px">Research</p><ul aria-labelledby="nav-research">'
+           + item("research", "/research", "Lab procurement")
            + '</ul><p class="group" id="nav-books" style="margin-top:14px">Books</p><ul aria-labelledby="nav-books">'
            + item("ledger", "/ledger", "Ledger")
            + item("rules", "/rules", "Payment rules")
@@ -586,6 +588,30 @@ def steps_html(conn, case_id, row):
 
 # --- overview, new invoice, exceptions, cases ------------------------------------------------
 
+def buying_history(conn):
+    """Completed purchases from the ledger, never from submitted amounts or research drafts."""
+    purchases = conn.execute(
+        "SELECT p.*, c.state AS case_state FROM payments p LEFT JOIN cases c ON c.id=p.case_id "
+        "WHERE p.status='paid' ORDER BY COALESCE(p.paid_at,p.created_at) DESC,p.id DESC LIMIT 10"
+    ).fetchall()
+    if not purchases:
+        return '<p class="empty">No completed purchases yet. Paid invoices will appear here.</p>'
+    rows = []
+    for p in purchases:
+        state = json.loads(p["case_state"] or "{}")
+        vendor = ((state.get("resolution") or {}).get("vendor") or {}).get("legal_name") or p["vendor_id"]
+        rows.append(
+            f'<tr><td>{escape(vendor)}<div class="small muted mono">{escape(p["po_number"] or "No purchase order recorded")}</div></td>'
+            f'<td><a href="/cases/{escape(p["case_id"], quote=True)}" class="mono">{escape(p["invoice_number"])}</a></td>'
+            f'<td class="num">{fmt(p["amount_paise"])} <span class="small muted">{escape(p["currency"])}</span></td>'
+            f'<td class="small nowrap">{when(p["paid_at"]) if p["paid_at"] else "Not recorded"}</td>'
+            f'<td>{status_chip("PAID")}<div class="small muted mono">{escape(p["bank_ref"] or "")}</div></td></tr>')
+    return ('<div class="table-wrap"><table><caption class="sr-only">Ten most recent purchases recorded as paid in the sandbox ledger</caption>'
+            '<thead><tr><th scope="col">Vendor / purchase order</th><th scope="col">Invoice</th>'
+            '<th scope="col" class="num">Amount paid</th><th scope="col">Paid on</th><th scope="col">Status</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>')
+
+
 @app.get("/", response_class=HTMLResponse)
 def overview(note: str = "", error: str = ""):
     with closing(db.connect()) as conn:
@@ -594,6 +620,7 @@ def overview(note: str = "", error: str = ""):
         recon = recon_line(conn)
         recent = conn.execute("SELECT * FROM cases ORDER BY created_at DESC LIMIT 5").fetchall()
         recent_table = cases_table(conn, recent, "Most recent invoices")
+        purchase_table = buying_history(conn)
         holds = conn.execute("SELECT * FROM cases WHERE status = 'HOLD' ORDER BY created_at DESC").fetchall()
         stuck = pipeline.unfinished(conn)
     attention = []
@@ -633,7 +660,12 @@ def overview(note: str = "", error: str = ""):
     <div class="panel-head"><h2 id="h-attn">Needs your attention</h2><a href="/exceptions" class="small">Exceptions</a></div>
     <div class="panel-body flush">{attention_html}</div>
   </section>
-</div>"""
+</div>
+<section class="panel" aria-labelledby="h-buying">
+  <div class="panel-head"><h2 id="h-buying">Buying history</h2><a href="/ledger" class="small">Full ledger</a></div>
+  <div class="panel-body"><p class="hint">Your 10 most recent completed purchases, recorded in the sandbox ledger. Holds, reservations and research drafts are excluded.</p></div>
+  <div class="panel-body flush">{purchase_table}</div>
+</section>"""
     return shell("Overview", body, active="overview", note=note, error=error)
 
 
@@ -1341,3 +1373,9 @@ def reset_demo(confirm: str = Form("")):
         db.clear_cases(conn)
     bank.clear()
     return RedirectResponse("/demo?note=" + quote("Demo data cleared."), status_code=303)
+
+
+# Optional independent extension; it owns research data and never authorizes an AP payout.
+from .research_bridge import attach_research  # noqa: E402
+
+attach_research(app, shell, config)

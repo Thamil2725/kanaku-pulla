@@ -1,0 +1,8 @@
+Document Type: ACADEMIC_BOM
+Reference: demo-paper:measurement-methods-001
+Supplier: Example Instruments | instruments.example.org | 12 Research Park, Kanpur, India
+Contact Name: Mira Example
+Contact Institution Domain: old-university.example.org
+Contact Profile: https://www.linkedin.com/in/synthetic-mira-example
+Item: General measurement kit, catalogue DEMO-42
+Item: Analysis code and calibration dataset

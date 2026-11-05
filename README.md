@@ -99,6 +99,18 @@ python -m kanaku_pulla issues            # anything found while upgrading an old
 
 **Manual tests:** `manual_tests/` has 15 emails to paste by hand, with expected results in its README.
 
+## Research procurement and buying history
+
+The dashboard's **Buying history** section lists the ten most recent purchases recorded as paid in the sandbox ledger: vendor, purchase order, invoice, amount, date and case link. It excludes reservations, held invoices, duplicates and research drafts. Existing dashboard sections retain their layout.
+
+**Lab procurement** at `/research` accepts academic materials lists and readable PDFs, checks supplier/contact evidence, compares geographic coordinates where available, and completes a team-only request draft. The engine is included in `research_core/` and installed by the main requirements file; no sibling checkout is needed.
+
+Research uses the same configured model router as invoices, including `OPENROUTER_API_KEY` or the ignored `open-router-key.txt`. It does **not** require an additional Anthropic key. Extracted values must have supporting quotes; failed citations get one repair attempt before a hold. Use **Retry document reading** for old failed uploads, or download the no-key text template. Completed actions and payment holds cannot be reopened by that retry.
+
+Research verification defaults to visibly fictional demo data. Live mode reuses the Crustdata credential loader; see [integration settings](research_core/INTEGRATION.md) for geocoding and trusted-reference setup. Research has no AP payment authorizations. The optional corporate handoff adapter does not automatically import evidence into invoice cases.
+
+Verification: **49 host tests + 41 Core tests**, plus a real OpenRouter read of fictional prose that completed one local team draft with quote checks. Live Crustdata/Google research checks were mocked in this verification. Run `python -m pytest` from the repo root for both suites together. The opt-in live reader smoke command is `python scripts/verify_research_reader.py`; it stores its case separately under `research_data/reader-smoke`.
+
 **The web app** has one page per job: Overview, New invoice, Exceptions (held invoices and the one thing each needs), All cases, Ledger (our books beside the bank's), Payment rules and Demo tools (resume, crash demo, fresh start). Submitting an invoice opens a live progress page: each step ticks off as it runs, the findings fill in, and the result appears at the end. Each case has four tabs: Decision (the payment-rule checklist), Evidence, Activity and Email (every field read, and whether it was found in the text).
 
 Without any model key Kanaku Pulla still runs: the regex reader takes over and the memo is rule-written, and the page

@@ -6,3 +6,4 @@ truststore
 fastapi
 uvicorn[standard]
 python-multipart
+-e ./research_core

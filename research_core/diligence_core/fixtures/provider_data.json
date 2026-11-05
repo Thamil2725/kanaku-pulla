@@ -1,0 +1,16 @@
+{
+  "notice": "ALL records, people, locations and relationships are synthetic test data. Not live findings.",
+  "observed_at": "2026-11-06T00:00:00+00:00",
+  "companies": {
+    "instruments.example.org": [{"confidence_score": 1, "company_data": {"crustdata_company_id": 1001, "basic_info": {"name": "Example Instruments Pvt Ltd", "primary_domain": "instruments.example.org"}}}],
+    "old-university.example.org": [{"confidence_score": 1, "company_data": {"crustdata_company_id": 2001, "basic_info": {"name": "Example Research University", "primary_domain": "old-university.example.org"}}}]
+  },
+  "people": {
+    "Alex Example": [{"crustdata_person_id": 3001, "basic_profile": {"name": "Alex Example"}, "social_handles": {"professional_network_identifier": {"profile_url": "https://www.linkedin.com/in/synthetic-alex-example"}}, "experience": {"employment_details": {"current": [{"crustdata_company_id": 1001, "name": "Example Instruments", "title": "Finance manager"}], "past": []}}}],
+    "Mira Example": [{"crustdata_person_id": 3002, "basic_profile": {"name": "Mira Example"}, "social_handles": {"professional_network_identifier": {"profile_url": "https://www.linkedin.com/in/synthetic-mira-example"}}, "experience": {"employment_details": {"current": [{"crustdata_company_id": 2002, "name": "Example New Institute", "title": "Research scientist"}], "past": [{"crustdata_company_id": 2001, "name": "Example Research University", "title": "Postdoctoral researcher", "end_date": "2025-06-01"}]}}}]
+  },
+  "geocodes": {
+    "12 Research Park, Kanpur, India": {"status": "located", "coordinates": {"lat": 26.4500, "lon": 80.3320}, "precision": "ROOFTOP", "partial_match": false, "property_use": "unknown", "types": ["premise"]},
+    "Flat 4, Example Apartments, Mumbai, India": {"status": "located", "coordinates": {"lat": 19.0760, "lon": 72.8777}, "precision": "ROOFTOP", "partial_match": false, "property_use": "unknown", "types": ["subpremise"]}
+  }
+}

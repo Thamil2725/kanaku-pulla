@@ -1,0 +1,2 @@
+# Also included by requirements.txt. Run pip from the repository root.
+-e ./research_core

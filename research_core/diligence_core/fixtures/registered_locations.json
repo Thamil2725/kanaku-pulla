@@ -1,0 +1,6 @@
+{
+  "1001": {
+    "coordinates": {"lat": 26.4499, "lon": 80.3319}, "tolerance_m": 5000,
+    "source": "demo://operator-vendor-register", "observed_at": "2026-11-06T00:00:00+00:00"
+  }
+}

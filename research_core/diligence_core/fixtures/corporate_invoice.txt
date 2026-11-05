@@ -1,0 +1,13 @@
+Document Type: INVOICE
+Reference: DEMO-INV-001
+Supplier: Example Instruments Pvt Ltd | instruments.example.org | 12 Research Park, Kanpur, India
+Contact Name: Alex Example
+Contact Institution Domain: instruments.example.org
+Contact Profile: https://www.linkedin.com/in/synthetic-alex-example
+Invoice Number: DEMO-INV-001
+PO Number: DEMO-PO-001
+Currency: INR
+Total: 50000.00
+Account: 123456789012
+IFSC: TEST0000123
+Item: General laboratory measurement kit

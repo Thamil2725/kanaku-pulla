@@ -5,5 +5,11 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+.pytest_cache/
+research_data/
 open-router-key.txt
 *-key.txt
+*.egg-info/
+research_core/runtime/
+research_core/dist/
+research_core/build/
