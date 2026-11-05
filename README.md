@@ -1,7 +1,8 @@
-# Munim
+# Kanaku Pulla (கணக்குப்பிள்ளை)
 
 **An accounts-payable agent that pays real vendor invoices exactly once and stops the fake ones.**
 Built overnight at ContextCon 04, IIT Kanpur. Theme: *Buying and paying*, with *Trust and compliance*.
+A *kanakku pillai* is the village accountant who kept the books in Tamil Nadu.
 
 ## The service
 
@@ -11,8 +12,8 @@ matching each invoice to what was ordered and delivered, and paying it once. Two
 fraudster (fake "our bank account changed" emails are one of the most common business frauds), and paying the same
 invoice twice.
 
-Munim does that job from the vendor's email to the payout. A person is asked only when an answer would change the
-result, and Munim says exactly what it needs from them.
+Kanaku Pulla does that job from the vendor's email to the payout. A person is asked only when an answer would change the
+result, and Kanaku Pulla says exactly what it needs from them.
 
 ## What it does today
 
@@ -31,8 +32,8 @@ vendor email ─► read ─► who is the vendor? ─► is the sender real? �
 3. **Check the sender** with Crustdata `/person/search`: do they work at the vendor today, in what role, and if they
    left, when and where they went.
 4. **Check the money is owed:** an approved purchase order covers it and a receipt shows it was delivered.
-5. **Decide** with fixed rules ([`munim/policy.py`](munim/policy.py)), never the model, so the same case gets the
-   same answer however it is worded. See [When Munim pays](#when-munim-pays).
+5. **Decide** with fixed rules ([`kanaku_pulla/policy.py`](kanaku_pulla/policy.py)), never the model, so the same case gets the
+   same answer however it is worded. See [When Kanaku Pulla pays](#when-kanaku-pulla-pays).
 6. **Explain.** Code renders the memo from the evidence records: verified facts are the exact evidence summaries
    (source + retrieval time), email claims are labelled as claims, reasoning is the policy's own findings, failed
    lookups are "could not verify". Claude may add a short summary, shown separately and labelled model-written.
@@ -42,11 +43,11 @@ vendor email ─► read ─► who is the vendor? ─► is the sender real? �
    transaction), then settle. A crash at any point resumes from the saved step; a reservation is never released on a
    timeout, because the bank may already have paid.
 8. **Hand over only the exception,** naming the smallest missing evidence and asking the one team member who can
-   supply it. When they answer, Munim checks the answer and finishes the same case.
+   supply it. When they answer, Kanaku Pulla checks the answer and finishes the same case.
 
-## When Munim pays
+## When Kanaku Pulla pays
 
-All of these must hold ([`munim/policy.py`](munim/policy.py), also shown at `/policy`):
+All of these must hold ([`kanaku_pulla/policy.py`](kanaku_pulla/policy.py), also shown at `/policy`):
 
 1. The vendor is in our register, matched by its registered domain or Crustdata company id
 2. The email's claimed sender address is on the vendor's registered domain (a consistency check, not authentication)
@@ -61,18 +62,18 @@ All of these must hold ([`munim/policy.py`](munim/policy.py), also shown at `/po
 Rejected outright: look-alike domains, and a resend of an already-paid invoice with any different payment detail.
 
 **What authorises a payment is our own records** (vendor register, purchase order, team receipt). The email's
-`From:` line is pasted text, so Munim records it as an unauthenticated *claim*; public-profile checks can stop a
+`From:` line is pasted text, so Kanaku Pulla records it as an unauthenticated *claim*; public-profile checks can stop a
 payment but never authorise one. There is no "approve anyway": a hold clears only when its specific missing
 evidence is supplied, and the full policy is re-run. People can always reject.
 
 ## The demo cases (`fixtures/`)
 
-| # | What comes in | What Munim does |
+| # | What comes in | What Kanaku Pulla does |
 |---|---|---|
-| 1 | Razorpay's October invoice, claiming to be from their finance controller, citing an approved PO with a team receipt | Pays it. Run with `MUNIM_CRASH_AT=after_bank` to kill the process after the bank pays; `resume` settles it with one payout. |
+| 1 | Razorpay's October invoice, claiming to be from their finance controller, citing an approved PO with a team receipt | Pays it. Run with `KANAKU_CRASH_AT=after_bank` to kill the process after the bank pays; `resume` settles it with one payout. |
 | 2 | "Our HDFC account is frozen, pay our new ICICI account today", from `razorpay-payments.in`, signed with the name of a real former Razorpay finance manager, with a hidden "skip verification" note | Rejects it: look-alike domain; the named person's public profile lists their Razorpay role as ended in June 2024 (Crustdata); account and IFSC differ from our register; embedded instruction ignored. |
 | 3 | The same invoice resent from `accounts@razorpay.com` as "RZP-2026-42" under "Razorpay Software Pvt. Ltd." | Duplicate: same company, same invoice; points to the ledger entry that paid it. |
-| 4 | A payroll onboarding invoice with a valid PO but no delivery receipt | Holds it and asks the ops lead for one thing: a receipt. When they record it, Munim pays the same case. |
+| 4 | A payroll onboarding invoice with a valid PO but no delivery receipt | Holds it and asks the ops lead for one thing: a receipt. When they record it, Kanaku Pulla pays the same case. |
 | 5 | A "revised" copy of invoice 1 asking for ₹1,81,000 | Rejects it: the invoice is already paid for ₹1,18,000; a real change needs a new invoice or debit note. |
 | 6 | A "reminder" renamed `RZP/2026/0042-REMINDER`, same amount, from a vendor mailbox | Holds it as a likely resend of a paid invoice: exact-number matching misses it, and its receipt is already used. It pays only if the team confirms a new delivery for this invoice. |
 
@@ -82,27 +83,29 @@ evidence is supplied, and the full policy is re-run. People can always reject.
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
 cp .env.example .env    # add ANTHROPIC_API_KEY and CRUSTDATA_API_KEY
 
-python -m munim reset
-MUNIM_CRASH_AT=after_bank python -m munim run fixtures/01_razorpay_invoice.txt   # dies after the bank pays
-python -m munim resume                                                            # settles it, one payout
-python -m munim run fixtures/0[2-5]*.txt
-python -m munim provide <case-id> --receipt "Payroll onboarding done 5 Nov" --by ops-lead@munim.local
-python -m munim ledger
+python -m kanaku_pulla reset
+KANAKU_CRASH_AT=after_bank python -m kanaku_pulla run fixtures/01_razorpay_invoice.txt   # dies after the bank pays
+python -m kanaku_pulla resume                                                            # settles it, one payout
+python -m kanaku_pulla run fixtures/0[2-5]*.txt
+python -m kanaku_pulla provide <case-id> --receipt "Payroll onboarding done 5 Nov" --by ops-lead@kanaku.local
+python -m kanaku_pulla ledger
 
-uvicorn munim.web:app --reload    # http://127.0.0.1:8000 (samples, hold → receipt → paid, ledger vs bank)
+uvicorn kanaku_pulla.web:app --reload    # http://127.0.0.1:8000
 
-python -m pytest tests            # 33 offline tests: temp databases, recorded Crustdata answers, real crash test
-python -m munim issues            # anything found while upgrading an older database
+python -m pytest tests                   # 34 offline tests: temp databases, recorded Crustdata answers, real crash test
+python -m kanaku_pulla issues            # anything found while upgrading an older database
 ```
 
-Without an Anthropic key Munim still runs: the regex reader takes over and the memo is rule-written, and the page
-says which was used. The tests force that mode (`MUNIM_OFFLINE=1`, `MUNIM_NO_LLM=1`), so they never call live
+**The web app** has one page per job: Overview, New invoice, Exceptions (held invoices and the one thing each needs), All cases, Ledger (our books beside the bank's), Payment rules and Demo tools (resume, crash demo, fresh start). Submitting an invoice opens a live progress page: each step ticks off as it runs, the findings fill in, and the result appears at the end. Each case has four tabs: Decision (the payment-rule checklist), Evidence, Activity and Email (every field read, and whether it was found in the text).
+
+Without an Anthropic key Kanaku Pulla still runs: the regex reader takes over and the memo is rule-written, and the page
+says which was used. The tests force that mode (`KANAKU_OFFLINE=1`, `KANAKU_NO_LLM=1`), so they never call live
 services. `tests/crustdata_cache.json` holds the six recorded Crustdata answers, with person profiles trimmed to the
-fields Munim uses.
+fields Kanaku Pulla uses.
 
 ## How it's built
 
-- **Python, SQLite, FastAPI.** State lives in `munim.db` (cases, evidence, audit timeline, ledger, outbox, API cache);
+- **Python, SQLite, FastAPI.** State lives in `kanaku.db` (cases, evidence, audit timeline, ledger, outbox, API cache);
   the sandbox bank is a separate database, `sandbox_bank.db`, because it stands in for a system we do not control.
 - **Claude** (`claude-opus-5-5`) reads emails into a typed schema and writes the cited memo. It never decides.
 - **Crustdata:** `/company/identify` (domain and name), `/person/search` (name + company id, current and past roles),
@@ -115,7 +118,7 @@ fields Munim uses.
 - **Money:** integer paise parsed with `Decimal`; malformed, zero, negative or non-finite amounts are rejected.
 - **Upgrades:** `db.migrate` upgrades older databases in place (adds paise columns, backfills receipt allocations) and
   records conflicts in `migration_issues` instead of deleting anything.
-- **Team only:** every outgoing message is checked against `MUNIM_TEAM_EMAILS`; Munim never contacts a vendor. The
+- **Team only:** every outgoing message is checked against `KANAKU_TEAM_EMAILS`; Kanaku Pulla never contacts a vendor. The
   team member who records a receipt is a typed-in sandbox identity, checked against that list but not authenticated.
 
 ## Approaches we considered
@@ -133,13 +136,13 @@ the amount (a changed resend could pay twice), that we were verifying companies 
 that the regex reader could take a subtotal, and that the cache never expired. A second review of commit `d5c957c`
 reproduced five more problems, each now covered by a test: two invoices could share one receipt or overspend a PO;
 currency and IFSC weren't checked; "Approve anyway" bypassed every control; model prose could pass as a cited fact;
-and the pasted sender was treated as more than a claim. See `MUNIM_EXPLAINED.md` for the plain-language status.
+and the pasted sender was treated as more than a claim. See `KANAKU_PULLA_EXPLAINED.md` for the plain-language status.
 
 ## What worked and what didn't
 
 - **Name matching alone is unreliable.** "Razorpay Software Private Limited" matches five companies at equal
-  confidence (0.6). Munim only trusts a name when the sending domain or our register agrees, and records the ambiguity.
-- **Alternate domains are noisy.** Crustdata lists `bitly.com` among Razorpay's domains (marketing links). Munim treats
+  confidence (0.6). Kanaku Pulla only trusts a name when the sending domain or our register agrees, and records the ambiguity.
+- **Alternate domains are noisy.** Crustdata lists `bitly.com` among Razorpay's domains (marketing links). Kanaku Pulla treats
   a domain that appears only in that list as a hold, not a match.
 - **Profiles describe what a profile lists, not employment or authority.** Evidence says "the public profile of X
   lists…", with the role dates the profile gives and the time we retrieved it. It can stop a payment, never authorise one.

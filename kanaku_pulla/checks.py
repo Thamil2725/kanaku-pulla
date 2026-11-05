@@ -216,7 +216,7 @@ def resolve_vendor(conn, case_id, cd, fields):
         out["match_basis"] = "crustdata company id" if domain_company else "registered domain"
         if name_vendor and name_vendor["vendor_id"] == vendor["vendor_id"] and vendor_name:
             out["evidence"].append(db.add_evidence(
-                conn, case_id, "inference", "munim",
+                conn, case_id, "inference", "rules",
                 f"The invoice name '{vendor_name}' and the sending domain {sender_domain} point to the same "
                 f"vendor record ({vendor['vendor_id']}), so they are treated as one company"))
     elif name_vendor and out["domain_status"] != "registered":
@@ -245,7 +245,7 @@ def verify_sender(conn, case_id, cd, fields, resolution):
     if not sender_name or words & ROLE_WORDS:
         out["status"] = "role_mailbox"
         out["evidence"].append(db.add_evidence(
-            conn, case_id, "inference", "munim",
+            conn, case_id, "inference", "rules",
             f"The claimed sender '{sender_name or sender_email}' is a shared mailbox, not a person, so no "
             f"public profile can be checked"))
         return out
@@ -254,7 +254,7 @@ def verify_sender(conn, case_id, cd, fields, resolution):
     company_name = (claimed or {}).get("legal_name") or (resolution.get("company") or {}).get("name")
     if not company_id:
         out["evidence"].append(db.add_evidence(
-            conn, case_id, "inference", "munim",
+            conn, case_id, "inference", "rules",
             f"No company could be resolved, so {sender_name}'s employment could not be checked"))
         return out
 

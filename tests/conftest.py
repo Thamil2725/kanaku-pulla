@@ -16,15 +16,15 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 OFFLINE_ENV = {
-    "MUNIM_OFFLINE": "1",
-    "MUNIM_NO_LLM": "1",
-    "MUNIM_CACHE_MAX_AGE_HOURS": "1000000",
-    "MUNIM_TEAM_EMAILS": "ap-lead@munim.local,ops-lead@munim.local",
+    "KANAKU_OFFLINE": "1",
+    "KANAKU_NO_LLM": "1",
+    "KANAKU_CACHE_MAX_AGE_HOURS": "1000000",
+    "KANAKU_TEAM_EMAILS": "ap-lead@kanaku.local,ops-lead@kanaku.local",
 }
 os.environ.update(OFFLINE_ENV)
 sys.path.insert(0, str(ROOT))
 
-from munim import config, db  # noqa: E402
+from kanaku_pulla import config, db  # noqa: E402
 
 CACHE_FILE = ROOT / "tests" / "crustdata_cache.json"
 
@@ -41,7 +41,7 @@ def seed_cache(conn):
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     paths = {
-        "DB_PATH": tmp_path / "munim.db",
+        "DB_PATH": tmp_path / "kanaku.db",
         "BANK_DB_PATH": tmp_path / "bank.db",
         "VENDOR_REGISTER": tmp_path / "vendors.json",
         "PURCHASE_ORDERS": tmp_path / "purchase_orders.json",
@@ -58,12 +58,12 @@ def env(tmp_path, monkeypatch):
 
 @pytest.fixture
 def subprocess_env(env):
-    """Environment for running `python -m munim` in a separate process against the same temp data."""
+    """Environment for running `python -m kanaku_pulla` in a separate process against the same temp data."""
     e = dict(os.environ)
     e.update(OFFLINE_ENV)
     e.update({
-        "MUNIM_DB": str(env.db_path), "MUNIM_BANK_DB": str(env.bank_db_path),
-        "MUNIM_VENDORS": str(env.vendor_register), "MUNIM_POS": str(env.purchase_orders),
+        "KANAKU_DB": str(env.db_path), "KANAKU_BANK_DB": str(env.bank_db_path),
+        "KANAKU_VENDORS": str(env.vendor_register), "KANAKU_POS": str(env.purchase_orders),
         "PYTHONIOENCODING": "utf-8",
     })
     e.pop("ANTHROPIC_API_KEY", None)
