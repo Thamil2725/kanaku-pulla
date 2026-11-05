@@ -19,7 +19,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, Form, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import bank, config, db, pipeline, policy
+from . import bank, books, config, db, pipeline, policy
 from .money import SUPPORTED_CURRENCIES, fmt, to_paise
 
 app = FastAPI(title="Kanaku Pulla")
@@ -476,23 +476,8 @@ def claimed_amount(fields):
 
 
 def reconcile(conn):
-    """Compare our ledger with the bank's payouts. Returns (problems, pending, ledger_count, bank_count)."""
-    ours = {p["payment_key"]: p for p in conn.execute("SELECT * FROM payments")}
-    theirs = {b["idempotency_key"]: b for b in bank.all_payouts()}
-    problems, pending = [], []
-    for key, p in ours.items():
-        b = theirs.get(key)
-        if p["status"] == "reserved":
-            pending.append(p)
-        if p["status"] == "paid" and not b:
-            problems.append(f"Ledger entry #{p['id']} is marked paid but the bank has no payout for it")
-        if b and (b["amount_paise"], b["account"], (b["ifsc"] or "").upper(), b["currency"]) != \
-                (p["amount_paise"], p["account"], (p["ifsc"] or "").upper(), p["currency"]):
-            problems.append(f"Ledger entry #{p['id']} and bank payout {b['reference']} disagree on the details")
-    for key, b in theirs.items():
-        if key not in ours:
-            problems.append(f"Bank payout {b['reference']} has no ledger entry")
-    return problems, pending, len(ours), len(theirs)
+    """Our ledger against the bank (shared with the payment step, which pauses while they disagree)."""
+    return books.reconcile(conn)
 
 
 def recon_line(conn):
@@ -986,11 +971,14 @@ def case_decision(case_id: str, note: str = "", error: str = ""):
 <section class="panel" aria-labelledby="h-needs">
   <div class="panel-head"><h2 id="h-needs">To pay, it needs</h2></div>
   <div class="panel-body"><ul style="margin:0;padding-left:20px">{need_items}</ul>{receipt_form}
-  <form method="post" action="/cases/{case_id}/resolve" class="recon">
-    <input type="hidden" name="action" value="reject">
-    <button class="btn btn-danger" type="submit">Reject invoice</button>
-    <span class="hint">No approve-anyway: supply the evidence or reject.</span>
-  </form></div>
+  <div class="recon">
+    <form method="post" action="/cases/{case_id}/recheck" data-busy="Re-checking…">
+      <button class="btn btn-line" type="submit">Re-check now</button></form>
+    <form method="post" action="/cases/{case_id}/resolve">
+      <input type="hidden" name="action" value="reject">
+      <button class="btn btn-danger" type="submit">Reject invoice</button></form>
+    <span class="hint">Re-check after a record is corrected. No approve-anyway.</span>
+  </div></div>
 </section>"""
 
     checks = "".join(
@@ -1060,7 +1048,7 @@ def case_evidence(case_id: str):
   {section('What the email claims', 'claims', 'Not verified.')}
   {section('Problems found', 'inferences')}
   {section('Could not verify', 'could_not_verify')}
-  {section('Summary written by Claude', 'model_summary', 'Model-written; not machine-checked.')}
+  {section('Model-written summary', 'model_summary', 'Cites evidence; not machine-checked.')}
   </div>
 </section>
 <section class="panel" aria-labelledby="h-ev">
@@ -1148,6 +1136,17 @@ def resolve(case_id: str, action: str = Form(...)):
         except ValueError as exc:
             return RedirectResponse(f"/cases/{case_id}?error=" + quote(str(exc)), status_code=303)
     return RedirectResponse(f"/cases/{case_id}?note=" + quote("Rejected. Nothing paid."), status_code=303)
+
+
+@app.post("/cases/{case_id}/recheck")
+def recheck(case_id: str):
+    with closing(db.connect()) as conn:
+        try:
+            status = pipeline.recheck(conn, case_id, who="ap-lead")
+        except ValueError as exc:
+            return RedirectResponse(f"/cases/{case_id}?error=" + quote(str(exc)), status_code=303)
+    return RedirectResponse(f"/cases/{case_id}?note=" + quote(f"Re-checked: {STATUS.get(status, (status,))[0]}."),
+                            status_code=303)
 
 
 # --- books ---------------------------------------------------------------------------------

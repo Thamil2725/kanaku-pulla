@@ -56,6 +56,8 @@ def main(argv=None):
     rj = sub.add_parser("reject", help="reject a held case (there is no 'approve anyway')")
     rj.add_argument("case_id")
     rj.add_argument("--note", default="")
+    rc = sub.add_parser("recheck", help="run the payment rules again on a held case after a record was corrected")
+    rc.add_argument("case_id")
     sub.add_parser("issues", help="problems found while upgrading an older database")
     pv = sub.add_parser("provide", help="supply the missing evidence a held case asked for")
     pv.add_argument("case_id")
@@ -96,6 +98,9 @@ def main(argv=None):
         show(conn, args.case_id)
     elif args.cmd == "reject":
         pipeline.human_resolve(conn, args.case_id, "reject", note=args.note)
+        show(conn, args.case_id)
+    elif args.cmd == "recheck":
+        pipeline.recheck(conn, args.case_id)
         show(conn, args.case_id)
     elif args.cmd == "issues":
         rows = conn.execute("SELECT * FROM migration_issues ORDER BY id").fetchall()

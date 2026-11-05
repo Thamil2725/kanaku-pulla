@@ -18,7 +18,7 @@ import os
 import sys
 import uuid
 
-from . import bank, checks, config, db, memo, policy
+from . import bank, books, checks, config, db, llm, memo, policy
 from .crustdata import Crustdata
 from .extract import best_amount, currency_reading, extract, quote_is_grounded
 from .money import fmt, rupees_to_paise, to_paise
@@ -120,7 +120,7 @@ def step_extract(conn, cd, case_id, row, state):
         f"payable to account {flat.get('bank_account_number')} (IFSC {flat.get('bank_ifsc')}), "
         f"PO {flat.get('po_number') or 'not given'}",
         data={"fields": flat, "quotes": state["quotes"]})
-    reader = "Claude" if method == "claude" else "the rule-based reader"
+    reader = llm.name(method)
     db.log_event(conn, case_id, "extract",
                  f"Invoice {flat.get('invoice_number') or '(no number)'} read by {reader}",
                  evidence=[sender_ev, invoice_ev])
@@ -260,7 +260,13 @@ def _reserve(conn, case_id, state):
 
         po = policy.find_po(po_number)
         problem = None
-        if (not po or po.get("status", "approved") != "approved" or po["vendor_id"] != vendor["vendor_id"]
+        mismatches = books.reconcile(conn)[0]
+        if mismatches:  # fail closed: someone or something changed our books; no new money moves until fixed
+            problem = ("books_mismatch", "hold",
+                       f"Payments are paused: our ledger and the bank disagree ({mismatches[0]}"
+                       + (f", and {len(mismatches) - 1} more" if len(mismatches) > 1 else "") + ")",
+                       {"evidence": "a reconciliation of our ledger with the bank", "ask": "ap-lead"})
+        elif (not po or po.get("status", "approved") != "approved" or po["vendor_id"] != vendor["vendor_id"]
                 or po.get("currency") != currency):
             problem = ("po_changed", "hold", f"{po_number} is no longer an approved {currency} purchase order "
                                              f"for this vendor", {"evidence": "a valid purchase order", "ask": "ap-lead"})
@@ -370,6 +376,22 @@ def human_resolve(conn, case_id, action, who="ap-lead", note=""):
         conn.execute("UPDATE cases SET state = ?, step = 'act', status = 'RUNNING', updated_at = ? WHERE id = ?",
                      (json.dumps(state, default=str), db.now(), case_id))
     db.log_event(conn, case_id, "human", f"{who} rejected the invoice" + (f": {note}" if note else ""))
+    return run(conn, case_id)
+
+
+def recheck(conn, case_id, who="ap-lead"):
+    """Run every payment rule again on a held case, for when a record was corrected outside the app.
+
+    Nothing is waived: it is the same decision step, against the current registers and ledger.
+    """
+    row, state = _load(conn, case_id)
+    if row["status"] != "HOLD":
+        raise ValueError(f"case {case_id} is {row['status']}, not on hold")
+    state["round"] = state.get("round", 0) + 1
+    with conn:
+        conn.execute("UPDATE cases SET state = ?, step = 'decide', status = 'RUNNING', updated_at = ? WHERE id = ?",
+                     (json.dumps(state, default=str), db.now(), case_id))
+    db.log_event(conn, case_id, "human", f"{who} asked for a re-check")
     return run(conn, case_id)
 
 

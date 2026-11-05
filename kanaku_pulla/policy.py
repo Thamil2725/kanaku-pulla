@@ -13,7 +13,7 @@ only stop a payment, never authorise one.
 
 import json
 
-from . import config, db
+from . import books, config, db
 from .checks import normalize_invoice_number, payment_key
 from .money import SUPPORTED_CURRENCIES, fmt, rupees_to_paise, to_paise
 
@@ -47,10 +47,17 @@ def find_po(po_number):
 
 
 def po_allocated_paise(conn, po_number, exclude_key=None):
-    """Reserved plus paid amounts against a PO, excluding one payment key (the case being decided)."""
-    return conn.execute(
-        "SELECT COALESCE(SUM(amount_paise), 0) FROM payments WHERE po_number = ? AND status IN ('reserved', 'paid') "
-        "AND payment_key != ?", (po_number, exclude_key or "")).fetchone()[0]
+    """Reserved plus paid amounts against a PO, excluding one payment key (the case being decided).
+
+    Each entry counts the larger of our ledger amount and what the bank actually paid for it, so lowering
+    a ledger amount by hand frees no room on the PO.
+    """
+    paid_by_bank = books.bank_amounts()
+    rows = conn.execute(
+        "SELECT payment_key, amount_paise FROM payments WHERE po_number = ? AND status IN ('reserved', 'paid') "
+        "AND payment_key != ?", (po_number, exclude_key or "")).fetchall()
+    return sum(max(r["amount_paise"] or 0, (paid_by_bank.get(r["payment_key"]) or {}).get("amount_paise") or 0)
+               for r in rows)
 
 
 def receipt_records(conn, po):

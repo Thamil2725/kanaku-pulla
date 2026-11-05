@@ -66,7 +66,30 @@ def crustdata_key() -> str:
         return ""
 
 
+def gemini_key() -> str:
+    # Google's SDKs read GOOGLE_API_KEY first when both are set; do the same.
+    return (os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "").strip()
+
+
+def openrouter_key() -> str:
+    return os.environ.get("OPENROUTER_API_KEY", "").strip()
+
+
+GEMINI_MODEL = os.environ.get("KANAKU_GEMINI_MODEL", "gemini-3.5-flash-lite")
+OPENROUTER_MODEL = os.environ.get("KANAKU_OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
+# Which models read emails and write the labelled summary, in the order to try them. Empty means automatic:
+# every provider whose key is set, Gemini first, then OpenRouter, then Claude. "none" turns models off.
+LLM_CHOICE = os.environ.get("KANAKU_LLM", "").strip().lower()
+
+
 def anthropic_available() -> bool:
-    if NO_LLM:
-        return False
     return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+
+
+def llm_providers() -> list[str]:
+    """Configured providers in the order to try them; empty means the rule-based reader is used."""
+    if NO_LLM or LLM_CHOICE == "none":
+        return []
+    have = {"gemini": bool(gemini_key()), "openrouter": bool(openrouter_key()), "claude": anthropic_available()}
+    order = [p.strip() for p in LLM_CHOICE.split(",") if p.strip()] if LLM_CHOICE else ["gemini", "openrouter", "claude"]
+    return [p for p in order if have.get(p)]

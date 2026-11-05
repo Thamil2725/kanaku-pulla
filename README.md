@@ -24,7 +24,7 @@ vendor email ─► read ─► who is the vendor? ─► is the sender real? �
                  └─ two independent readings of the amount must agree
 ```
 
-1. **Read** the email and invoice into fields, each with the exact text it came from (Claude, with a strict regex
+1. **Read** the email and invoice into fields, each with the exact text it came from (a model, with a strict regex
    reader as a fallback and as a second reading of the amount).
 2. **Resolve the vendor.** The sending domain is looked up in Crustdata (`/company/identify`) and matched to our
    vendor register by Crustdata company id, so "Razorpay", "Razorpay Software Pvt. Ltd." and `razorpay.com` are one
@@ -36,7 +36,7 @@ vendor email ─► read ─► who is the vendor? ─► is the sender real? �
    same answer however it is worded. See [When Kanaku Pulla pays](#when-kanaku-pulla-pays).
 6. **Explain.** Code renders the memo from the evidence records: verified facts are the exact evidence summaries
    (source + retrieval time), email claims are labelled as claims, reasoning is the policy's own findings, failed
-   lookups are "could not verify". Claude may add a short summary, shown separately and labelled model-written.
+   lookups are "could not verify". The model may add a short summary, shown separately and labelled model-written.
    The status line ("Paid …") is read from the ledger, never from the memo.
 7. **Act.** In one `BEGIN IMMEDIATE` transaction, re-check the PO's unspent authorisation and the receipt, then reserve
    the invoice and allocate the receipt. Commit, then pay through the bank with a stable idempotency key (outside any
@@ -81,24 +81,25 @@ evidence is supplied, and the full policy is re-run. People can always reject.
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
-cp .env.example .env    # add ANTHROPIC_API_KEY and CRUSTDATA_API_KEY
+cp .env.example .env    # add CRUSTDATA_API_KEY and a model key (GEMINI_API_KEY, OPENROUTER_API_KEY or ANTHROPIC_API_KEY)
 
 python -m kanaku_pulla reset
 KANAKU_CRASH_AT=after_bank python -m kanaku_pulla run fixtures/01_razorpay_invoice.txt   # dies after the bank pays
 python -m kanaku_pulla resume                                                            # settles it, one payout
 python -m kanaku_pulla run fixtures/0[2-5]*.txt
 python -m kanaku_pulla provide <case-id> --receipt "Payroll onboarding done 5 Nov" --by ops-lead@kanaku.local
+python -m kanaku_pulla recheck <case-id>                                       # after a record is corrected
 python -m kanaku_pulla ledger
 
 uvicorn kanaku_pulla.web:app --reload    # http://127.0.0.1:8000
 
-python -m pytest tests                   # 34 offline tests: temp databases, recorded Crustdata answers, real crash test
+python -m pytest tests                   # 42 offline tests: temp databases, recorded Crustdata answers, real crash test
 python -m kanaku_pulla issues            # anything found while upgrading an older database
 ```
 
 **The web app** has one page per job: Overview, New invoice, Exceptions (held invoices and the one thing each needs), All cases, Ledger (our books beside the bank's), Payment rules and Demo tools (resume, crash demo, fresh start). Submitting an invoice opens a live progress page: each step ticks off as it runs, the findings fill in, and the result appears at the end. Each case has four tabs: Decision (the payment-rule checklist), Evidence, Activity and Email (every field read, and whether it was found in the text).
 
-Without an Anthropic key Kanaku Pulla still runs: the regex reader takes over and the memo is rule-written, and the page
+Without any model key Kanaku Pulla still runs: the regex reader takes over and the memo is rule-written, and the page
 says which was used. The tests force that mode (`KANAKU_OFFLINE=1`, `KANAKU_NO_LLM=1`), so they never call live
 services. `tests/crustdata_cache.json` holds the six recorded Crustdata answers, with person profiles trimmed to the
 fields Kanaku Pulla uses.
@@ -107,12 +108,18 @@ fields Kanaku Pulla uses.
 
 - **Python, SQLite, FastAPI.** State lives in `kanaku.db` (cases, evidence, audit timeline, ledger, outbox, API cache);
   the sandbox bank is a separate database, `sandbox_bank.db`, because it stands in for a system we do not control.
-- **Claude** (`claude-opus-5-5`) reads emails into a typed schema and writes the cited memo. It never decides.
+- **A model** reads emails into a typed schema and writes a labelled summary. It never decides. Whichever keys are
+  set are tried in order: Google Gemini (`gemini-3.5-flash-lite`, free key from AI Studio), OpenRouter (NVIDIA
+  Nemotron 3 Ultra, free), then Claude. A failing key falls through to the next; if all fail, the regex reader is used.
+  The amount is always read a second time by the regex reader, and a disagreement holds the invoice.
 - **Crustdata:** `/company/identify` (domain and name), `/person/search` (name + company id, current and past roles),
   `/company/enrich` for vendors not in the register. Responses are cached with their retrieval time and refetched
   after 24 hours; failures are retried with backoff and, if they persist, recorded as "could not verify".
 - **Exactly once:** the payment key is vendor + normalized invoice number (not amount), reserved in the ledger before
   the bank call. The bank refuses a reused key if account, IFSC, amount or currency differ.
+- **Books against the bank:** before reserving any payment, our ledger is compared with the bank's payouts; while
+  they disagree (someone edited the books), payments pause and the invoice is held. PO room counts the larger of
+  the ledger amount and what the bank paid, so lowering a ledger entry frees nothing.
 - **Receipts and PO budgets:** `receipt_allocations` gives each receipt one payment (receipt ids are globally unique);
   PO capacity counts reserved and paid amounts, re-checked inside the reservation transaction.
 - **Money:** integer paise parsed with `Decimal`; malformed, zero, negative or non-finite amounts are rejected.
@@ -146,7 +153,7 @@ and the pasted sender was treated as more than a claim. See `KANAKU_PULLA_EXPLAI
   a domain that appears only in that list as a hold, not a match.
 - **Profiles describe what a profile lists, not employment or authority.** Evidence says "the public profile of X
   lists…", with the role dates the profile gives and the time we retrieved it. It can stop a payment, never authorise one.
-- **Not yet tested:** the Claude reading and summary paths (no API key during the build), and the payment lock under
+- **Not yet tested:** the model paths against a live key (tested with stubbed replies), and the payment lock under
   many truly simultaneous processes (tested with two interleaved connections).
 - **Campus TLS interception** broke Python's certificate checks; we use the OS trust store (`truststore`) instead of
   turning verification off.

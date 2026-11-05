@@ -275,9 +275,10 @@ def test_receipt_must_come_from_the_team(env):
 # --- 4. provenance supports the claim -------------------------------------------------------------
 
 def test_model_prose_never_becomes_a_verified_fact(env, monkeypatch):
-    monkeypatch.setattr(config, "anthropic_available", lambda: True)
-    monkeypatch.setattr(memo, "_claude_summary", lambda *a, **k: [{"text": "The moon is made of cheese.",
-                                                                    "evidence": ["E1"]}])
+    monkeypatch.setattr(config, "llm_providers", lambda: ["gemini"])
+    monkeypatch.setattr("kanaku_pulla.extract.llm.structured", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
+    monkeypatch.setattr(memo, "_model_summary", lambda *a, **k: ([{"text": "The moon is made of cheese.",
+                                                                   "evidence": ["E1"]}], "gemini"))
     case_id, _ = process(env.conn, load("01_razorpay_invoice.txt"))
     m = state_of(env.conn, case_id)["memo"]
     evidence = {e["id"]: e for e in db.get_evidence(env.conn, case_id)}
@@ -423,3 +424,148 @@ def test_old_database_upgrades_and_reports_shared_receipts(tmp_path, monkeypatch
     assert issues and "GRN-2026-311" in issues[0][0]
     db.connect().close()  # running the upgrade again is harmless
     assert conn.execute("SELECT COUNT(*) FROM migration_issues").fetchone()[0] == len(issues)
+
+
+# --- hand-edited books, re-check, and the model path ----------------------------------------------------
+
+def _po(env, number, amount, receipts):
+    pos = json.loads(env.purchase_orders.read_text(encoding="utf-8"))
+    pos.append({"po_number": number, "vendor_id": "V-RZP", "description": "Gateway integration project",
+                "approved_amount": amount, "currency": "INR", "approved_by": "finance-head@kanaku.local",
+                "approved_on": "2026-10-01", "requested_by": "ops-lead@kanaku.local", "status": "approved",
+                "receipts": [{"id": f"GRN-{number}-{i}", "amount": r, "currency": "INR", "note": "delivered",
+                              "recorded_by": "ops-lead@kanaku.local", "recorded_at": "2026-11-01"}
+                             for i, r in enumerate(receipts)]})
+    env.purchase_orders.write_text(json.dumps(pos), encoding="utf-8")
+
+
+def _bill(number, po, amount="50,000.00"):
+    return load("01_razorpay_invoice.txt", ("RZP/2026/0042", number), ("PO-2026-118", po),
+                ("INR 1,18,000.00 (incl. GST 18%)", f"INR {amount}"))
+
+
+def test_lowering_a_paid_ledger_amount_frees_no_room_on_the_po(env):
+    c = env.conn
+    _po(env, "PO-2026-900", 100000, [50000, 50000, 50000])
+    assert process(c, _bill("RZP/2026/0901", "PO-2026-900"))[1] == "PAID"
+    assert process(c, _bill("RZP/2026/0902", "PO-2026-900"))[1] == "PAID"
+    with c:
+        c.execute("UPDATE payments SET amount_paise = 0, amount = 0 WHERE id = (SELECT MIN(id) FROM payments)")
+    case_id, st = process(c, _bill("RZP/2026/0903", "PO-2026-900"))
+    assert st == "HOLD"
+    assert any(f["code"] == "po_exhausted" for f in state_of(c, case_id)["findings"])
+    assert sum(p["amount_paise"] for p in payouts()) == 10000000  # still ₹1,00,000
+
+
+def test_payments_pause_while_books_and_bank_disagree(env):
+    c = env.conn
+    assert process(c, load("01_razorpay_invoice.txt"))[1] == "PAID"
+    with c:  # someone edits the ledger by hand
+        c.execute("UPDATE payments SET account = '99999999999999'")
+    _po(env, "PO-2026-901", 100000, [50000])
+    case_id, st = process(c, _bill("RZP/2026/0911", "PO-2026-901"))
+    assert st == "HOLD"
+    assert any(f["code"] == "books_mismatch" for f in state_of(c, case_id)["findings"])
+    assert len(payouts()) == 1
+    with c:  # reconciled: the record is put back
+        c.execute("UPDATE payments SET account = '50200012345678'")
+    assert pipeline.recheck(c, case_id) == "PAID"
+    assert len(payouts()) == 2
+
+
+def test_recheck_clears_a_hold_once_the_register_is_corrected(env):
+    c = env.conn
+    case_id, st = process(c, load("04_needs_receipt.txt"))
+    assert st == "HOLD"
+    add_receipt_to_po(env, "PO-2026-131", {"id": "GRN-FIX-1", "amount": 59000, "currency": "INR", "note": "setup done",
+                                           "recorded_by": "ops-lead@kanaku.local", "recorded_at": "2026-11-05"})
+    assert pipeline.recheck(c, case_id) == "PAID"
+    with pytest.raises(ValueError):
+        pipeline.recheck(c, case_id)  # only held cases can be re-checked
+
+
+def _gemini_reply_from_regex(raw):
+    return extract._extract_with_regex(raw).model_dump_json()
+
+
+def test_gemini_reads_the_email_when_its_key_is_set(env, monkeypatch):
+    from kanaku_pulla import llm
+    calls = []
+    monkeypatch.setattr(config, "llm_providers", lambda: ["gemini"])
+
+    def fake_gemini(system, user, schema):
+        calls.append(schema.__name__)
+        if schema.__name__ == "InvoiceFields":
+            return _gemini_reply_from_regex(user.removeprefix("<email>\n").removesuffix("\n</email>"))
+        return json.dumps({"points": [{"text": "Paid: every rule passed.", "evidence": ["E3"]}]})
+
+    monkeypatch.setattr(llm, "_gemini_json", fake_gemini)
+    case_id, st = process(env.conn, load("01_razorpay_invoice.txt"))
+    s = state_of(env.conn, case_id)
+    assert st == "PAID" and s["extract_method"] == "gemini"
+    assert s["memo_method"] == "rules + Gemini summary" and s["memo"]["model_summary"]
+    assert calls == ["InvoiceFields", "Summary"]
+
+
+def test_gemini_failure_falls_back_to_the_rule_based_reader(env, monkeypatch):
+    from kanaku_pulla import llm
+    monkeypatch.setattr(config, "llm_providers", lambda: ["gemini"])
+    monkeypatch.setattr(llm, "_gemini_json", lambda *a: (_ for _ in ()).throw(RuntimeError("429 quota")))
+    case_id, st = process(env.conn, load("01_razorpay_invoice.txt"))
+    s = state_of(env.conn, case_id)
+    assert st == "PAID" and s["extract_method"] == "regex" and s["memo_method"] == "rules"
+
+
+def test_model_amount_must_agree_with_the_second_reading(env, monkeypatch):
+    from kanaku_pulla import llm
+    monkeypatch.setattr(config, "llm_providers", lambda: ["gemini"])
+
+    def wrong_amount(system, user, schema):
+        if schema.__name__ != "InvoiceFields":
+            raise RuntimeError("no summary")
+        data = json.loads(_gemini_reply_from_regex(user.removeprefix("<email>\n").removesuffix("\n</email>")))
+        data["amount"]["value"] = "11800.00"  # a dropped digit
+        return json.dumps(data)
+
+    monkeypatch.setattr(llm, "_gemini_json", wrong_amount)
+    case_id, st = process(env.conn, load("01_razorpay_invoice.txt"))
+    assert st == "HOLD"
+    assert any(f["code"] == "amount_disagreement" for f in state_of(env.conn, case_id)["findings"])
+    assert payouts() == []
+
+
+def test_a_failing_gemini_key_falls_through_to_openrouter(env, monkeypatch):
+    from kanaku_pulla import llm
+    monkeypatch.setattr(config, "llm_providers", lambda: ["gemini", "openrouter"])
+    monkeypatch.setattr(llm, "_gemini_json", lambda *a: (_ for _ in ()).throw(RuntimeError("API key not valid")))
+
+    def fake_openrouter(system, user, schema):
+        if schema.__name__ != "InvoiceFields":
+            raise RuntimeError("no summary")
+        return schema.model_validate_json(_gemini_reply_from_regex(user.removeprefix("<email>\n").removesuffix("\n</email>")))
+
+    monkeypatch.setattr(llm, "_openrouter", fake_openrouter)
+    case_id, st = process(env.conn, load("01_razorpay_invoice.txt"))
+    assert st == "PAID" and state_of(env.conn, case_id)["extract_method"] == "openrouter"
+
+
+def test_openrouter_reply_is_cleaned_and_repaired(monkeypatch):
+    from kanaku_pulla import llm
+    from kanaku_pulla.memo import Summary
+    good = json.dumps({"points": [{"text": "Paid.", "evidence": ["E1"]}]})
+    replies = [
+        {"choices": [{"message": {"content": "<think>hmm</think>```json\n{\"points\": \"oops\"}\n```"}}]},
+        {"choices": [{"message": {"content": "Here you go:\n```json\n" + good + "\n```"}}]},
+    ]
+    sent = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        sent.append(json)
+        return _Resp(200, replies.pop(0))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(config, "openrouter_key", lambda: "test-key")
+    parsed = llm._openrouter("system", "user", Summary)
+    assert parsed.points[0].text == "Paid."
+    assert len(sent) == 2 and "did not match the schema" in sent[1]["messages"][-1]["content"]
+    assert sent[0]["model"] == config.OPENROUTER_MODEL

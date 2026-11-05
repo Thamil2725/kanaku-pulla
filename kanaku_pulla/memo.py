@@ -2,7 +2,7 @@
 
 Everything a reader might take as proven is rendered by code from the evidence
 records themselves: verified facts are the exact evidence summaries, claims are
-what the email says, reasoning is the policy's own findings. Claude may add a
+what the email says, reasoning is the policy's own findings. The model may add a
 short plain-language summary, but it is shown separately and labelled as
 model-written. Its citations are checked for existence, which shows where to
 look, not that the sentence is true.
@@ -12,7 +12,7 @@ import json
 
 from pydantic import BaseModel
 
-from . import config
+from . import config, llm
 
 UNVERIFIED_CODES = {"sender_unverified", "ungrounded_amount", "ungrounded_invoice_number",
                     "ungrounded_sender_email", "ungrounded_bank_account_number", "ungrounded_bank_ifsc",
@@ -79,22 +79,20 @@ def write_memo(decision, findings, evidence, invoice_summary):
         "model_summary": [],
     }
     method = "rules"
-    if config.anthropic_available():
+    if config.llm_providers():
         valid = {e["id"] for e in evidence}
         try:
-            points = _claude_summary(decision, findings, evidence, invoice_summary)
+            points, provider = _model_summary(decision, findings, evidence, invoice_summary)
             if points and not citation_problems(points, valid):
                 out["model_summary"] = [dict(p) for p in points]
-                method = "rules + Claude summary"
+                method = f"rules + {llm.name(provider)} summary"
         except Exception as exc:
-            print(f"[memo] Claude summary skipped ({exc.__class__.__name__}: {exc})")
+            print(f"[memo] model summary skipped ({exc.__class__.__name__}: {exc})")
     return out, method
 
 
-def _claude_summary(decision, findings, evidence, invoice_summary):
-    import anthropic
-
-    client = anthropic.Anthropic()
+def _model_summary(decision, findings, evidence, invoice_summary):
+    """Return (points, provider)."""
     valid = {e["id"] for e in evidence}
     payload = {
         "decision": decision,
@@ -102,19 +100,14 @@ def _claude_summary(decision, findings, evidence, invoice_summary):
         "policy_findings": [{k: f[k] for k in ("code", "text", "evidence")} for f in findings],
         "evidence": [{k: e[k] for k in ("id", "kind", "source", "summary", "retrieved_at")} for e in evidence],
     }
-    messages = [{"role": "user", "content": json.dumps(payload, indent=1, ensure_ascii=False)}]
+    user = json.dumps(payload, indent=1, ensure_ascii=False)
+    provider = ""
     for _ in range(2):
-        response = client.messages.parse(
-            model=config.MODEL, max_tokens=4000, system=SYSTEM, messages=messages, output_format=Summary)
-        parsed = response.parsed_output
-        if parsed is None:
-            return []
+        parsed, provider = llm.structured(SYSTEM, user, Summary)
         points = [p.model_dump() for p in parsed.points]
         problems = citation_problems(points, valid)
         if not problems:
-            return points
-        messages += [
-            {"role": "assistant", "content": parsed.model_dump_json()},
-            {"role": "user", "content": "Fix these citation problems and return all points again:\n" + "\n".join(problems)},
-        ]
-    return []
+            return points, provider
+        user += ("\n\nYour previous answer had citation problems. Fix them and return all points again:\n"
+                 + "\n".join(problems))
+    return [], provider
