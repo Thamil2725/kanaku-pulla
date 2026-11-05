@@ -219,6 +219,30 @@ def decide(conn, case_id, fields, grounded, resolution, sender, extra=None):
                     f"{fmt(prior['amount_paise'])} {prior['currency']} to account ending {prior['account'][-4:]} "
                     f"(IFSC {prior['ifsc']}). A real change comes as a new invoice or a debit note.", [ev])
 
+    # A renamed resend ("RZP-2026-42-REMINDER", "RZP-2026-42-R1") of an invoice we already paid, for the same amount.
+    # Same amount alone proves nothing (monthly bills repeat), so only a number that extends a paid one counts, and
+    # it clears when the team records a delivery for this specific invoice, which is what makes it a new charge.
+    if vendor_id and inv and amount is not None and not any(f["code"] in ("duplicate", "changed_resend") for f in findings):
+        mine = inv.split("-")
+        team_receipt_here = conn.execute("SELECT 1 FROM receipts WHERE case_id = ?", (case_id,)).fetchone()
+        for p in conn.execute("SELECT * FROM payments WHERE vendor_id = ? AND case_id != ? AND status IN "
+                              "('reserved', 'paid') ORDER BY id", (vendor_id, case_id)):
+            theirs = p["invoice_number"].split("-")
+            n = min(len(mine), len(theirs))
+            if mine != theirs and mine[:n] == theirs[:n] and p["amount_paise"] == amount and not team_receipt_here:
+                ev = db.add_evidence(
+                    conn, case_id, "fact", "ledger",
+                    f"Invoice {inv} extends the number of invoice {p['invoice_number']}, which is already {p['status']} "
+                    f"for the same {fmt(amount)} (entry #{p['id']}, case {p['case_id']})", data=dict(p))
+                add("duplicate_suspect", "hold",
+                    f"Invoice {inv} looks like a renamed resend of {p['invoice_number']}, already {p['status']} for the "
+                    f"same amount", [ev],
+                    needs={"evidence": f"a receipt from the team for this invoice, confirming a new delivery (not a "
+                                       f"resend of {p['invoice_number']})",
+                           "ask": "ap-lead", "provide_as": "receipt", "po_number": p["po_number"],
+                           "amount_paise": amount, "currency": p["currency"]})
+                break
+
     # Is the money owed? Three-way match: purchase order, receipt, invoice.
     if (vendor and amount is not None and currency in SUPPORTED_CURRENCIES
             and not any(f["severity"] in ("duplicate", "block") for f in findings)):

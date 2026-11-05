@@ -6,7 +6,7 @@
 Labels: `OPEN` = known problem, not fixed. `IN PROGRESS` = being fixed now. `FIXED - NOT VERIFIED` = a change
 exists but its check hasn't passed yet. `VERIFIED` = fixed and its automated test passed.*
 
-**How this was checked:** 31 automated tests (`python -m pytest tests`), run offline against temporary databases
+**How this was checked:** 33 automated tests (`python -m pytest tests`), run offline against temporary databases
 with six recorded Crustdata answers, the backup text reader and rule-written explanations, plus a real
 "kill the program" crash test in a separate process. Separately, one **live** run of all five demo emails against
 Crustdata (6 calls, 0.46 credits, retrieved 2026-11-05 20:24 UTC) gave the same results. Claude was **not** used in
@@ -159,6 +159,7 @@ out, because the bank may already have sent the money; the retry with the same t
 | The same October bill sent again as a "reminder", with the company name and bill number written differently | **Doesn't pay it.** It recognises it's the same bill from the same company and points to the payment that already covered it. |
 | A "revised" copy of the October bill asking for more money | **Rejects it.** That bill was already paid for a different amount. A real correction would come as a new bill. |
 | A bill for payroll setup where nobody has confirmed the work was done | **Holds it** and asks the operations lead for that one confirmation. Once given, it pays. |
+| The October bill sent again as "RZP/2026/0042-REMINDER", same amount | **Holds it** as a likely resend. A system that only compares exact bill numbers would miss it. It pays only if the team confirms a *new* delivery for this bill. |
 
 ## What it won't do
 
@@ -198,6 +199,10 @@ changes by phone, and onboarding new suppliers automatically.
   from evidence records; the sender is recorded as an unauthenticated claim; the status line is read from the ledger.
   Older databases upgrade in place: nothing is deleted, and any confirmation that two old payments shared is
   reported (`python -m munim issues`). The demo database upgraded with 0 issues.
+- **2026-11-06, extra cases:** a renamed resend of a paid bill ("…-REMINDER", same amount) is now held as a likely
+  resend; a test covers a sender whose profile lists an ended role writing from the real domain. Considered but not
+  built: judging a bill by the supplier's headcount, and flagging home addresses. Both would turn away honest small
+  businesses, and the payment already requires an approved order and a team-confirmed delivery. 33 tests pass.
 
 ## Verification summary (2026-11-06)
 
@@ -215,3 +220,5 @@ changes by phone, and onboarding new suppliers automatically.
 | A model sentence ("The moon is made of cheese") citing a real evidence number | Never shown as a verified fact; only in the labelled model summary |
 | Crustdata timeouts, rate limits, broken replies, stale cache | Retries a fixed number of times, then shows "could not check" |
 | Live run of the five emails (Crustdata, no Claude) | Same results as the offline tests |
+| A paid bill resent with "-REMINDER" added to its number | Held as a likely resend; pays only after the team confirms a new delivery |
+| A bill naming someone whose profile lists their role as ended, from the supplier's real domain | Held, asking the supplier's registered contact to confirm |

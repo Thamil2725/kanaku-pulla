@@ -74,6 +74,7 @@ evidence is supplied, and the full policy is re-run. People can always reject.
 | 3 | The same invoice resent from `accounts@razorpay.com` as "RZP-2026-42" under "Razorpay Software Pvt. Ltd." | Duplicate: same company, same invoice; points to the ledger entry that paid it. |
 | 4 | A payroll onboarding invoice with a valid PO but no delivery receipt | Holds it and asks the ops lead for one thing: a receipt. When they record it, Munim pays the same case. |
 | 5 | A "revised" copy of invoice 1 asking for ₹1,81,000 | Rejects it: the invoice is already paid for ₹1,18,000; a real change needs a new invoice or debit note. |
+| 6 | A "reminder" renamed `RZP/2026/0042-REMINDER`, same amount, from a vendor mailbox | Holds it as a likely resend of a paid invoice: exact-number matching misses it, and its receipt is already used. It pays only if the team confirms a new delivery for this invoice. |
 
 ## Run it
 
@@ -90,7 +91,7 @@ python -m munim ledger
 
 uvicorn munim.web:app --reload    # http://127.0.0.1:8000
 
-python -m pytest tests            # 31 offline tests: temp databases, recorded Crustdata answers, real crash test
+python -m pytest tests            # 33 offline tests: temp databases, recorded Crustdata answers, real crash test
 python -m munim issues            # anything found while upgrading an older database
 ```
 

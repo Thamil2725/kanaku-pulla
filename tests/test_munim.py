@@ -288,6 +288,30 @@ def test_profile_wording_does_not_claim_current_employment(env):
                for e in db.get_evidence(env.conn, case_id))
 
 
+# --- extra cases from the Argon review ---------------------------------------------------------------
+
+def test_renamed_reminder_is_held_until_a_new_delivery_is_confirmed(env):
+    c = env.conn
+    assert process(c, load("01_razorpay_invoice.txt"))[1] == "PAID"
+    case_id, st = process(c, load("06_renamed_reminder.txt"))
+    assert st == "HOLD"
+    assert any(f["code"] == "duplicate_suspect" for f in state_of(c, case_id)["findings"])
+    assert len(payouts()) == 1
+    # Only a delivery confirmed for this specific invoice turns it into a new charge.
+    pipeline.provide_receipt(c, case_id, "ops-lead@munim.local", "November gateway usage reconciled")
+    assert status(c, case_id) == "PAID"
+    assert len(payouts()) == 2
+
+
+def test_named_sender_with_ended_role_on_the_real_domain_is_held(env):
+    raw = load("01_razorpay_invoice.txt", ("Neha Kamath <neha.kamath@razorpay.com>",
+                                           "Baddal Verma <baddal.verma@razorpay.com>"))
+    case_id, st = process(env.conn, raw)
+    assert st == "HOLD"
+    assert any(f["code"] == "sender_left" for f in state_of(env.conn, case_id)["findings"])
+    assert payouts() == []
+
+
 # --- 5. the sender is a claim, not an authenticated identity ------------------------------------------
 
 def test_pasted_sender_is_only_a_claim(env):

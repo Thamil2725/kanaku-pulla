@@ -1,0 +1,15 @@
+From: Razorpay Accounts <accounts@razorpay.com>
+To: payables@ourco.in
+Subject: Payment reminder - INV RZP/2026/0042-REMINDER
+
+Hello,
+
+This is a gentle reminder that the invoice below is pending. Kindly clear it at the earliest.
+
+Razorpay Software Pvt. Ltd.
+Invoice No: RZP/2026/0042-REMINDER
+PO No: PO-2026-118
+Amount Due: INR 1,18,000.00
+Pay to: Razorpay Software Pvt. Ltd.
+A/c No: 50200012345678
+IFSC: HDFC0000123
