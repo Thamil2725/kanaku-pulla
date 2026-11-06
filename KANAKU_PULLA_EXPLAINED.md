@@ -259,4 +259,10 @@ The site has a **Lab procurement** section at `/research`, using the same sideba
 - **Verification:** all 41 Core tests and 49 host tests passed after combining with Claude's AP changes. Real OpenRouter extraction of fictional prose also completed one local team draft with quote checks. Crustdata/Google research calls were mocked; this does not claim visual browser verification.
 - **Running site:** `/research` is live on port 8000. A synthetic address-discrepancy case completed a team draft; submitting it again returned the same case and retained one draft. All five research tabs and the existing pages returned HTTP 200, and the AP ledger page was unchanged by the research run.
 
-The integration uses `kanaku_pulla/research_bridge.py`; implementation notes and run instructions are in `research_core/README.md` and `research_core/INTEGRATION.md`. The color/font refresh is a follow-up; existing layouts were retained, with the requested buying section added.
+The integration uses `kanaku_pulla/research_bridge.py`; implementation notes and run instructions are in `research_core/README.md` and `research_core/INTEGRATION.md`.
+
+## Color and font refresh
+
+The Crustdata-inspired theme is implemented: violet accents, neutral light/dark surfaces, Stack Sans Headline headings, Inter body text and JetBrains Mono for ledger numbers/code. Existing page structure, dimensions, spacing and responsive rules are unchanged. Status colors remain distinct.
+
+Four page-rendering tests passed, the Google Fonts stylesheet returned all requested fonts, and calculated text contrast for the tested color pairs exceeded 4.5:1 in both themes. The isolated preview is at `http://127.0.0.1:8001/`; it uses copied data with external calls disabled. Port 8000 was deliberately left running for the user's manual testing and will pick up the theme after its next normal restart. See `docs/theme.md` for the reference and verification limits.
